@@ -88,10 +88,19 @@ describe("isGuestAllowed", () => {
     expect(isGuestAllowed("HEAD", "/api/tracks/12/stream")).toBe(true);
   });
 
-  it("denies every write", () => {
+  it("permits only the two guest write actions", () => {
+    expect(isGuestAllowed("POST", "/api/jam/add")).toBe(true);
+    expect(isGuestAllowed("POST", "/api/jam/leave")).toBe(true);
+    expect(isGuestAllowed("POST", "/api/jam/admit")).toBe(false);
+    expect(isGuestAllowed("POST", "/api/playlists")).toBe(false);
+    expect(isGuestAllowed("POST", "/api/stats/listen")).toBe(false);
+  });
+
+  it("denies every other write", () => {
     expect(isGuestAllowed("POST", "/api/tracks/1/stream")).toBe(false);
     expect(isGuestAllowed("DELETE", "/api/tracks/1")).toBe(false);
     expect(isGuestAllowed("PATCH", "/api/artwork/1")).toBe(false);
+    expect(isGuestAllowed("PATCH", "/api/jam/add")).toBe(false);
   });
 
   it("denies anything not named, so a new endpoint is host-only by default", () => {

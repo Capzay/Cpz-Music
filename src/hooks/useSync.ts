@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { usePlayerStore, type Command } from "@/store/player";
+import type { PlayerTrack } from "@/lib/types";
 import {
   PLAYER_CHANNEL,
   detectPlatform,
@@ -71,6 +72,12 @@ export function useSync() {
         // Only remotes mirror state; the active device is the one producing it.
         if (usePlayerStore.getState().isActiveDevice) return;
         usePlayerStore.getState().applySharedState(payload as SharedState);
+      })
+      .on("broadcast", { event: "jam-add" }, ({ payload }) => {
+        // Sent by the server on a guest's behalf; guests cannot broadcast here.
+        if (!usePlayerStore.getState().isActiveDevice) return;
+        const { track } = payload as { track: PlayerTrack };
+        if (track) usePlayerStore.getState().apply({ type: "addToQueue", track });
       })
       .on("broadcast", { event: "cmd" }, ({ payload }) => {
         const { target, command } = payload as { target: string; command: Command };

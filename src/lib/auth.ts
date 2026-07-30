@@ -69,5 +69,8 @@ export function isGuestAllowed(method: string, pathname: string): boolean {
   if (method === "GET" || method === "HEAD") {
     return pathname.startsWith("/api/artwork/") || pathname.startsWith("/api/tracks/");
   }
+  if (method === "POST") {
+    return pathname === "/api/jam/add" || pathname === "/api/jam/leave";
+  }
   return false;
 }

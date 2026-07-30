@@ -56,9 +56,18 @@ next-env.d.ts
 *.wav
 *.aac
 
-# android / electron build output
-/android/app/build
-/android/.gradle
+# desktop and mobile wrapper build output
 /electron/dist
 /electron/release
 /electron/node_modules
+/mobile/node_modules
+/mobile/android/build
+/mobile/android/app/build
+/mobile/android/.gradle
+/mobile/android/local.properties
+/mobile/android/app/src/main/assets/public
+/mobile/android/app/src/main/assets/capacitor.config.json
+/mobile/android/capacitor-cordova-android-plugins
+# signing material must never be committed
+*.keystore
+*.jks

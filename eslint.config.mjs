@@ -17,7 +17,7 @@ const eslintConfig = defineConfig([
     // Separate workspaces with their own toolchains. The desktop wrapper is
     // CommonJS by necessity, which this config's rules reject on principle.
     "electron/**",
-    "android/**",
+    "mobile/**",
   ]),
 ]);
 

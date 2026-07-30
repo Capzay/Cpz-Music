@@ -32,6 +32,7 @@ export function useAudio() {
 
   const loadedTrackId = useRef<number | null>(null);
   const consecutiveErrors = useRef(0);
+  const lastNativePush = useRef(0);
 
   // Restore the saved volume once, on the client, so SSR and hydration agree.
   useEffect(() => {
@@ -109,6 +110,15 @@ export function useAudio() {
     const onTimeUpdate = () => {
       usePlayerStore.getState().setCurrentTime(audio.currentTime);
       setPositionState(audio.duration, audio.currentTime);
+
+      // The Android lock screen needs the position pushed to it, but timeupdate
+      // fires several times a second and every call crosses the native bridge.
+      const now = Date.now();
+      if (now - lastNativePush.current > 5000) {
+        lastNativePush.current = now;
+        const s = usePlayerStore.getState();
+        updateMediaSession(s.queue[s.index] ?? null, s.isPlaying, audio.currentTime);
+      }
     };
 
     const onDurationChange = () => {

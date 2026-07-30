@@ -8,6 +8,7 @@ import {
   setPositionState,
   updateMediaSession,
 } from "@/lib/media-session";
+import { reportListen, startListenQueue } from "@/lib/listen-queue";
 
 /** One element for the whole app; a second one would play over the first. */
 let element: HTMLAudioElement | null = null;
@@ -38,6 +39,7 @@ export function useAudio() {
     if (Number.isFinite(saved) && saved >= 0 && saved <= 1) {
       usePlayerStore.setState({ volume: saved });
     }
+    startListenQueue();
   }, []);
 
   // Load whenever the track changes. A remote mirrors state on screen but must
@@ -46,6 +48,11 @@ export function useAudio() {
     const audio = audioElement();
     if (!audio || trackId == null || !isActiveDevice) return;
     if (trackId === loadedTrackId.current) return;
+
+    // Bank whatever played of the outgoing track before currentTime resets.
+    if (loadedTrackId.current !== null) {
+      reportListen(loadedTrackId.current, audio.currentTime, false);
+    }
 
     loadedTrackId.current = trackId;
     audio.src = streamUrl(trackId);
@@ -109,6 +116,9 @@ export function useAudio() {
     };
 
     const onEnded = () => {
+      const finished = usePlayerStore.getState().queue[usePlayerStore.getState().index];
+      if (finished) reportListen(finished.id, audio.duration || 0, true);
+
       dispatch({ type: "next" });
 
       // Load and play the next track right here rather than waiting for the

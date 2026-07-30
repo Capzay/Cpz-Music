@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { toPlayerTrack, trackSelect } from "@/lib/types";
 import { TrackList } from "@/components/TrackList";
 import { PlayAlbumButton } from "@/components/PlayAlbumButton";
+import { DownloadButton } from "@/components/DownloadButton";
 
 export default async function AlbumPage(props: PageProps<"/albums/[id]">) {
   const { id } = await props.params;
@@ -50,8 +51,9 @@ export default async function AlbumPage(props: PageProps<"/albums/[id]">) {
             </Link>
             {album.year ? ` · ${album.year}` : ""} · {tracks.length} tracks
           </p>
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap gap-2">
             <PlayAlbumButton tracks={tracks} />
+            <DownloadButton tracks={tracks} />
           </div>
         </div>
       </header>

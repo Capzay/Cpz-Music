@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { toPlayerTrack, trackSelect } from "@/lib/types";
 import { PlayAlbumButton } from "@/components/PlayAlbumButton";
+import { DownloadButton } from "@/components/DownloadButton";
 import { PlaylistTracks } from "@/components/PlaylistTracks";
 import { PlaylistHeader } from "@/components/PlaylistHeader";
 
@@ -33,8 +34,9 @@ export default async function PlaylistPage(props: PageProps<"/playlists/[id]">) 
       <PlaylistHeader id={playlist.id} name={playlist.name} count={entries.length} />
 
       {entries.length > 0 ? (
-        <div className="mb-5">
+        <div className="mb-5 flex flex-wrap gap-2">
           <PlayAlbumButton tracks={entries.map((e) => e.track)} />
+          <DownloadButton tracks={entries.map((e) => e.track)} />
         </div>
       ) : (
         <p className="text-sm text-neutral-500">

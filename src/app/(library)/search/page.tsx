@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { formatDuration } from "@/lib/format";
+import { toPlayerTrack, trackSelect } from "@/lib/types";
 import { AlbumCard } from "@/components/AlbumCard";
+import { TrackList } from "@/components/TrackList";
 
 export const metadata = { title: "Search" };
 
@@ -37,13 +38,7 @@ async function Results({ query }: { query: string }) {
       where: { title: contains },
       take: 25,
       orderBy: { title: "asc" },
-      select: {
-        id: true,
-        title: true,
-        duration: true,
-        artist: { select: { name: true } },
-        album: { select: { id: true, title: true } },
-      },
+      select: trackSelect,
     }),
     prisma.album.findMany({
       where: { title: contains },
@@ -110,24 +105,7 @@ async function Results({ query }: { query: string }) {
       {tracks.length > 0 ? (
         <section>
           <h2 className="mb-2 text-sm font-medium text-neutral-400">Tracks</h2>
-          <ul className="divide-y divide-neutral-900">
-            {tracks.map((track) => (
-              <li key={track.id} className="flex items-center gap-4 py-2.5 text-sm">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{track.title}</span>
-                  <span className="block truncate text-xs text-neutral-500">
-                    {track.artist.name} ·{" "}
-                    <Link href={`/albums/${track.album.id}`} className="hover:underline">
-                      {track.album.title}
-                    </Link>
-                  </span>
-                </span>
-                <span className="shrink-0 tabular-nums text-neutral-500">
-                  {formatDuration(track.duration)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <TrackList tracks={tracks.map(toPlayerTrack)} showArtist numbered={false} />
         </section>
       ) : null}
     </div>

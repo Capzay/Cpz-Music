@@ -1,37 +1,37 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { formatDuration } from "@/lib/format";
+import { toPlayerTrack, trackSelect } from "@/lib/types";
+import { TrackList } from "@/components/TrackList";
+import { PlayAlbumButton } from "@/components/PlayAlbumButton";
 
 export default async function AlbumPage(props: PageProps<"/albums/[id]">) {
   const { id } = await props.params;
   const albumId = Number(id);
   if (!Number.isInteger(albumId)) notFound();
 
-  const album = await prisma.album.findUnique({
-    where: { id: albumId },
-    select: {
-      id: true,
-      title: true,
-      year: true,
-      artworkPath: true,
-      artist: { select: { id: true, name: true } },
-      tracks: {
-        orderBy: [{ discNumber: "asc" }, { trackNumber: "asc" }, { title: "asc" }],
-        select: {
-          id: true,
-          title: true,
-          duration: true,
-          trackNumber: true,
-          artist: { select: { id: true, name: true } },
+  const [album, playlists] = await Promise.all([
+    prisma.album.findUnique({
+      where: { id: albumId },
+      select: {
+        id: true,
+        title: true,
+        year: true,
+        artworkPath: true,
+        artist: { select: { id: true, name: true } },
+        tracks: {
+          orderBy: [{ discNumber: "asc" }, { trackNumber: "asc" }, { title: "asc" }],
+          select: trackSelect,
         },
       },
-    },
-  });
+    }),
+    prisma.playlist.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
   if (!album) notFound();
 
-  // Only worth showing per track on compilations, where they differ.
-  const isCompilation = album.tracks.some((t) => t.artist.id !== album.artist.id);
+  const tracks = album.tracks.map(toPlayerTrack);
+  // Per-track artists are only worth showing on compilations, where they differ.
+  const isCompilation = tracks.some((t) => t.artist.id !== album.artist.id);
 
   return (
     <>
@@ -39,11 +39,7 @@ export default async function AlbumPage(props: PageProps<"/albums/[id]">) {
         <div className="h-40 w-40 shrink-0 overflow-hidden rounded-md bg-neutral-900">
           {album.artworkPath ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={`/api/artwork/${album.id}`}
-              alt=""
-              className="h-full w-full object-cover"
-            />
+            <img src={`/api/artwork/${album.id}`} alt="" className="h-full w-full object-cover" />
           ) : null}
         </div>
         <div className="min-w-0">
@@ -52,31 +48,15 @@ export default async function AlbumPage(props: PageProps<"/albums/[id]">) {
             <Link href={`/artists/${album.artist.id}`} className="hover:underline">
               {album.artist.name}
             </Link>
-            {album.year ? ` · ${album.year}` : ""} · {album.tracks.length} tracks
+            {album.year ? ` · ${album.year}` : ""} · {tracks.length} tracks
           </p>
+          <div className="mt-3">
+            <PlayAlbumButton tracks={tracks} />
+          </div>
         </div>
       </header>
 
-      <ol className="divide-y divide-neutral-900">
-        {album.tracks.map((track, i) => (
-          <li key={track.id} className="flex items-center gap-4 py-2.5 text-sm">
-            <span className="w-6 shrink-0 text-right tabular-nums text-neutral-600">
-              {track.trackNumber ?? i + 1}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate">{track.title}</span>
-              {isCompilation ? (
-                <span className="block truncate text-xs text-neutral-500">
-                  {track.artist.name}
-                </span>
-              ) : null}
-            </span>
-            <span className="shrink-0 tabular-nums text-neutral-500">
-              {formatDuration(track.duration)}
-            </span>
-          </li>
-        ))}
-      </ol>
+      <TrackList tracks={tracks} playlists={playlists} showArtist={isCompilation} />
     </>
   );
 }

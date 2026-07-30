@@ -3,16 +3,20 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAudio } from "@/hooks/useAudio";
+import { useSync } from "@/hooks/useSync";
 import { usePlayerStore, useCurrentTrack } from "@/store/player";
 import { artworkUrl } from "@/lib/types";
 import { Controls } from "./Controls";
+import { DevicePicker } from "./DevicePicker";
 import { ProgressBar } from "./ProgressBar";
 import { QueuePanel } from "./QueuePanel";
 import { QueueIcon, VolumeIcon } from "./icons";
 
 export function PlayerBar() {
-  // Mounted once in the library layout, so this is where the audio element lives.
+  // Mounted once in the library layout, so this is where the audio element and
+  // the Realtime channel live.
   useAudio();
+  useSync();
 
   const track = useCurrentTrack();
   const volume = usePlayerStore((s) => s.volume);
@@ -70,6 +74,7 @@ export function PlayerBar() {
           </div>
 
           <div className="flex items-center justify-end gap-3">
+            <DevicePicker />
             <VolumeIcon className="h-4 w-4 text-neutral-500" muted={volume === 0} />
             <input
               type="range"

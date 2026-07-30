@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/artists", label: "Artists" },
   { href: "/playlists", label: "Playlists" },
   { href: "/search", label: "Search" },
+  { href: "/settings", label: "Settings" },
 ];
 
 function isActive(pathname: string, href: string) {

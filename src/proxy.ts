@@ -2,8 +2,21 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { identityFromUser, isGuestAllowed } from "@/lib/auth";
 
-/** Reachable without a session. Everything else needs one. */
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/health", "/jam/join"];
+/**
+ * Reachable without a session. Everything else needs one.
+ *
+ * `/obs` and `/api/now-playing` are not unauthenticated: they carry their own
+ * signed-token check, because an OBS browser source cannot complete an OAuth
+ * flow. The proxy steps aside and those handlers do the work themselves.
+ */
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth/callback",
+  "/api/health",
+  "/jam/join",
+  "/obs",
+  "/api/now-playing",
+];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));

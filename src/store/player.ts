@@ -10,6 +10,7 @@ import {
   type QueuePosition,
 } from "@/lib/queue";
 import type { PlayerTrack, RepeatMode } from "@/lib/types";
+import type { DevicePresence, SharedState } from "@/lib/realtime";
 
 /**
  * Everything the player can be asked to do.
@@ -48,8 +49,20 @@ interface PlayerState {
   /** Set to ask the audio element to seek; cleared once it has. */
   seekTarget: number | null;
 
+  // ── Multi-device ────────────────────────────────────────────────────────────
+  devices: DevicePresence[];
+  activeDeviceId: string | null;
+  isActiveDevice: boolean;
+  /**
+   * Set by the sync hook once the channel is joined. Until then commands apply
+   * locally, so a single device works with Realtime unreachable or disabled.
+   */
+  forward: ((command: Command) => void) | null;
+
   dispatch: (command: Command) => void;
   apply: (command: Command) => void;
+  applySharedState: (state: SharedState) => void;
+  setDevices: (devices: DevicePresence[], activeDeviceId: string | null, selfId: string) => void;
   setVolume: (volume: number) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
@@ -97,9 +110,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     repeat: "off",
     seekTarget: null,
 
-    // In M4 this grows a branch that forwards the command to the active device
-    // when this tab is only acting as a remote. Nothing else has to change.
-    dispatch: (command) => get().apply(command),
+    devices: [],
+    activeDeviceId: null,
+    isActiveDevice: true,
+    forward: null,
+
+    /**
+     * The one place that knows whether this device plays audio or only acts as a
+     * remote. Everything in the UI calls dispatch and stays unaware.
+     */
+    dispatch: (command) => {
+      const { isActiveDevice, forward } = get();
+      if (!isActiveDevice && forward) return forward(command);
+      get().apply(command);
+    },
 
     apply: (command) => {
       const s = get();
@@ -209,6 +233,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         case "cycleRepeat":
           return set({ repeat: NEXT_REPEAT[s.repeat] });
       }
+    },
+
+    /** Mirrors what the active device is doing onto a remote's screen. */
+    applySharedState: (state) => {
+      set({
+        queue: state.queue,
+        index: state.index,
+        isPlaying: state.isPlaying,
+        currentTime: state.currentTime,
+        shuffle: state.shuffle,
+        repeat: state.repeat,
+        // Shuffle bookkeeping belongs to whichever device is actually playing.
+        shuffleOrder: [],
+        shufflePos: 0,
+      });
+    },
+
+    setDevices: (devices, activeDeviceId, selfId) => {
+      const isActiveDevice = activeDeviceId === null || activeDeviceId === selfId;
+      // Stop making noise the moment this device stops being the active one.
+      if (!isActiveDevice && get().isActiveDevice) set({ isPlaying: false });
+      set({ devices, activeDeviceId, isActiveDevice });
     },
 
     setVolume: (volume) => {

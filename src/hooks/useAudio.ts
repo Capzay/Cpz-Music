@@ -27,6 +27,7 @@ export function useAudio() {
   const volume = usePlayerStore((s) => s.volume);
   const seekTarget = usePlayerStore((s) => s.seekTarget);
   const trackId = usePlayerStore((s) => s.queue[s.index]?.id ?? null);
+  const isActiveDevice = usePlayerStore((s) => s.isActiveDevice);
 
   const loadedTrackId = useRef<number | null>(null);
   const consecutiveErrors = useRef(0);
@@ -39,25 +40,38 @@ export function useAudio() {
     }
   }, []);
 
-  // Load whenever the track changes.
+  // Load whenever the track changes. A remote mirrors state on screen but must
+  // never fetch or play audio, or two devices would be making noise at once.
   useEffect(() => {
     const audio = audioElement();
-    if (!audio || trackId == null) return;
+    if (!audio || trackId == null || !isActiveDevice) return;
     if (trackId === loadedTrackId.current) return;
 
     loadedTrackId.current = trackId;
     audio.src = streamUrl(trackId);
     audio.load();
     if (usePlayerStore.getState().isPlaying) void audio.play().catch(() => {});
-  }, [trackId]);
+  }, [trackId, isActiveDevice]);
 
   useEffect(() => {
     const audio = audioElement();
     if (!audio) return;
+
+    if (!isActiveDevice) {
+      audio.pause();
+      // Drop the source so handing playback away also stops buffering.
+      audio.removeAttribute("src");
+      loadedTrackId.current = null;
+      updateMediaSession(null, false);
+      return;
+    }
+
     if (isPlaying) void audio.play().catch(() => {});
     else audio.pause();
-    updateMediaSession(usePlayerStore.getState().queue[usePlayerStore.getState().index] ?? null, isPlaying);
-  }, [isPlaying, trackId]);
+
+    const s = usePlayerStore.getState();
+    updateMediaSession(s.queue[s.index] ?? null, isPlaying);
+  }, [isPlaying, trackId, isActiveDevice]);
 
   useEffect(() => {
     const audio = audioElement();

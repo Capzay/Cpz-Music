@@ -82,23 +82,21 @@ describe("identityFromUser", () => {
 });
 
 describe("isGuestAllowed", () => {
-  it("permits reading the library", () => {
-    expect(isGuestAllowed("GET", "/api/tracks")).toBe(true);
+  it("permits streaming audio and fetching artwork", () => {
     expect(isGuestAllowed("GET", "/api/tracks/12/stream")).toBe(true);
     expect(isGuestAllowed("GET", "/api/artwork/5")).toBe(true);
+    expect(isGuestAllowed("HEAD", "/api/tracks/12/stream")).toBe(true);
   });
 
-  it("permits only the three guest write actions", () => {
-    expect(isGuestAllowed("POST", "/api/jam/add")).toBe(true);
-    expect(isGuestAllowed("POST", "/api/jam/leave")).toBe(true);
-    expect(isGuestAllowed("POST", "/api/playlists")).toBe(false);
+  it("denies every write", () => {
+    expect(isGuestAllowed("POST", "/api/tracks/1/stream")).toBe(false);
+    expect(isGuestAllowed("DELETE", "/api/tracks/1")).toBe(false);
+    expect(isGuestAllowed("PATCH", "/api/artwork/1")).toBe(false);
   });
 
-  it("denies anything not named, including new endpoints", () => {
+  it("denies anything not named, so a new endpoint is host-only by default", () => {
     expect(isGuestAllowed("GET", "/api/stats")).toBe(false);
     expect(isGuestAllowed("GET", "/api/playlists")).toBe(false);
-    expect(isGuestAllowed("DELETE", "/api/tracks/1")).toBe(false);
-    expect(isGuestAllowed("PATCH", "/api/jam/add")).toBe(false);
     expect(isGuestAllowed("GET", "/api/some-future-endpoint")).toBe(false);
   });
 });

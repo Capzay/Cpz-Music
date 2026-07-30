@@ -67,21 +67,7 @@ export class UnauthorizedError extends Error {
  */
 export function isGuestAllowed(method: string, pathname: string): boolean {
   if (method === "GET" || method === "HEAD") {
-    return (
-      pathname.startsWith("/api/artwork/") ||
-      pathname.startsWith("/api/tracks") ||
-      pathname.startsWith("/api/albums") ||
-      pathname.startsWith("/api/artists") ||
-      pathname.startsWith("/api/search") ||
-      pathname === "/api/jam/me"
-    );
-  }
-  if (method === "POST") {
-    return (
-      pathname === "/api/jam/add" ||
-      pathname === "/api/jam/remove-own" ||
-      pathname === "/api/jam/leave"
-    );
+    return pathname.startsWith("/api/artwork/") || pathname.startsWith("/api/tracks/");
   }
   return false;
 }

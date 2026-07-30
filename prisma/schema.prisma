@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Artist {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  albums    Album[]
+  tracks    Track[]
+}
+
+model Album {
+  id          Int      @id @default(autoincrement())
+  title       String
+  artistId    Int
+  year        Int?
+  artworkPath String?
+  createdAt   DateTime @default(now())
+  artist      Artist   @relation(fields: [artistId], references: [id])
+  tracks      Track[]
+
+  @@unique([title, artistId])
+}
+
+model Track {
+  id          Int               @id @default(autoincrement())
+  title       String
+  artistId    Int
+  albumId     Int
+  trackNumber Int?
+  discNumber  Int               @default(1)
+  duration    Float?
+  filePath    String            @unique
+  fileSize    Int?
+  mimeType    String?
+  bitrate     Int?
+  sampleRate  Int?
+  mtime       Float
+  createdAt   DateTime          @default(now())
+  artist      Artist            @relation(fields: [artistId], references: [id])
+  album       Album             @relation(fields: [albumId], references: [id])
+  playlists   PlaylistTrack[]
+  listenStats DailyListenStat[]
+  jamAdds     JamQueueAdd[]
+
+  @@index([artistId])
+  @@index([albumId])
+  @@index([title])
+}
+
+model DailyListenStat {
+  trackId    Int
+  date       DateTime @db.Date
+  playCount  Int      @default(0)
+  listenSecs Int      @default(0)
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([trackId, date])
+  @@index([date])
+}
+
+model Playlist {
+  id        Int             @id @default(autoincrement())
+  name      String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  tracks    PlaylistTrack[]
+}
+
+model PlaylistTrack {
+  id         Int      @id @default(autoincrement())
+  playlistId Int
+  trackId    Int
+  position   Int
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, position])
+  @@index([playlistId])
+}
+
+model Jam {
+  id               String           @id @default(uuid())
+  hostName         String?
+  inviteEpoch      Int              @default(0)
+  requireApproval  Boolean          @default(true)
+  allowListenAlong Boolean          @default(true)
+  active           Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  endedAt          DateTime?
+  participants     JamParticipant[]
+  queueAdds        JamQueueAdd[]
+
+  @@index([active])
+}
+
+model JamParticipant {
+  id         String    @id @default(uuid())
+  jamId      String
+  name       String
+  /// Supabase anonymous auth user id. The JWT claim is matched against this so a
+  /// guest session cannot be pointed at somebody else's participant row.
+  userId     String?   @unique
+  status     String    @default("pending") // pending | admitted | kicked
+  joinedAt   DateTime  @default(now())
+  admittedAt DateTime?
+  jam        Jam       @relation(fields: [jamId], references: [id], onDelete: Cascade)
+
+  @@index([jamId])
+}
+
+model JamQueueAdd {
+  id      Int      @id @default(autoincrement())
+  jamId   String
+  pid     String
+  trackId Int
+  addedAt DateTime @default(now())
+  removed Boolean  @default(false)
+  jam     Jam      @relation(fields: [jamId], references: [id], onDelete: Cascade)
+  track   Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([jamId])
+  @@index([pid])
+}

@@ -13,7 +13,11 @@ const PUBLIC_PATHS = [
   "/login",
   "/auth/callback",
   "/api/health",
-  "/jam/join",
+  // The whole /jam tree: the page gates its own content by identity, and it has
+  // to be able to render "that invite is invalid" to somebody with no session.
+  // Redirecting them to /login instead would show an error page they cannot get
+  // to and offer them a sign-in they cannot complete.
+  "/jam",
   "/obs",
   "/api/now-playing",
 ];

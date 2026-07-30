@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseServer, supabaseAdmin } from "@/lib/supabase/server";
 import { joinJam, readInvite } from "@/lib/jam";
+import { identityFromUser } from "@/lib/auth";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
 
 /**
@@ -31,6 +32,13 @@ export async function GET(request: NextRequest) {
   // Reuse an existing session where there is one, so refreshing the invite link
   // does not strand the guest with a second anonymous account.
   const { data: current } = await supabase.auth.getUser();
+
+  // The owner testing their own invite link must not have guest claims written
+  // onto their GitHub account. Send them to the panel they actually wanted.
+  if (identityFromUser(current.user).role === "host") {
+    return NextResponse.redirect(new URL("/settings", request.nextUrl.origin));
+  }
+
   let userId = current.user?.id ?? null;
 
   if (!userId) {

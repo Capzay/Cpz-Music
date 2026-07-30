@@ -40,5 +40,11 @@
     "typescript": "^5",
     "vitest": "^4.1.10"
   },
-  "description": "Self-hosted personal music streamer"
+  "description": "Self-hosted personal music streamer",
+  "overrides": {
+    "brace-expansion": "^5.0.9",
+    "postcss": "^8.5.18",
+    "sharp": "^0.35.0",
+    "minimatch": "^10.0.3"
+  }
 }

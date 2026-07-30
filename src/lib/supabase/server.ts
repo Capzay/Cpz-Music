@@ -1,3 +1,6 @@
+// Importing this from a client component is a build error rather than a leaked
+// service role key. next/headers would catch most cases; this catches the rest.
+import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";

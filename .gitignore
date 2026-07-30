@@ -60,3 +60,5 @@ next-env.d.ts
 /android/app/build
 /android/.gradle
 /electron/dist
+/electron/release
+/electron/node_modules

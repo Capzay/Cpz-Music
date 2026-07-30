@@ -1,0 +1,40 @@
+{
+  "name": "cpz-music-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop wrapper for Cpz Music, with Discord Rich Presence",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "compile": "tsc && node build.mjs",
+    "start": "npm run compile && electron .",
+    "dist": "npm run compile && electron-builder",
+    "dist:linux": "npm run compile && electron-builder --linux",
+    "dist:win": "npm run compile && electron-builder --win",
+    "test": "npm run compile && node --test discord.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.0",
+    "typescript": "^5.8.0"
+  },
+  "build": {
+    "appId": "uk.capzay.music",
+    "productName": "Cpz Music",
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "AudioVideo"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}

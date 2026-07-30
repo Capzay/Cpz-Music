@@ -1,5 +1,45 @@
 import { artworkUrl, type PlayerTrack } from "@/lib/types";
 
+declare global {
+  interface Window {
+    /** Injected by the Electron preload script. Absent in a normal browser. */
+    cpzMusic?: { updatePresence: (presence: DesktopPresence | null) => void };
+  }
+}
+
+export interface DesktopPresence {
+  title: string;
+  artist: string;
+  album: string;
+  artwork: string;
+  isPlaying: boolean;
+}
+
+/**
+ * Hands the Discord Rich Presence data to the Electron shell.
+ *
+ * The old build could not do this: the desktop wrapper loaded the site as a
+ * black box, so it injected a script that patched the MediaSession prototype
+ * setters to spy on metadata changes. Both sides are ours now, so the app just
+ * says what it is playing and roughly eighty lines of injected JavaScript go
+ * away with it.
+ */
+function notifyDesktop(track: PlayerTrack | null, isPlaying: boolean) {
+  if (typeof window === "undefined" || !window.cpzMusic) return;
+
+  if (!track) return window.cpzMusic.updatePresence(null);
+
+  window.cpzMusic.updatePresence({
+    title: track.title,
+    artist: track.artist.name,
+    album: track.album.title,
+    artwork: track.album.hasArtwork
+      ? new URL(artworkUrl(track.album.id), window.location.href).toString()
+      : "",
+    isPlaying,
+  });
+}
+
 /**
  * Updates the OS-level now-playing card (lock screen, media keys, notification
  * shade). Must be callable synchronously from the audio `ended` handler: on
@@ -7,6 +47,8 @@ import { artworkUrl, type PlayerTrack } from "@/lib/types";
  * previous track until Chrome gets around to running the effect.
  */
 export function updateMediaSession(track: PlayerTrack | null, isPlaying: boolean) {
+  notifyDesktop(track, isPlaying);
+
   if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
 
   navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";

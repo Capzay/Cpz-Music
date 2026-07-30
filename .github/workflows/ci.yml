@@ -35,6 +35,22 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=high
 
+  desktop:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: electron
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # Not `npm ci`: the desktop wrapper is a separate workspace with its own
+      # lockfile, and Electron itself is not needed to typecheck or test it.
+      - run: npm install --ignore-scripts
+      - run: npx tsc --noEmit
+      - run: npm test
+
   secrets:
     runs-on: ubuntu-latest
     steps:

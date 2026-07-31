@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { albumFromPath } from "./metadata";
+import { albumFromPath, artistFromPath } from "./metadata";
 
 describe("albumFromPath", () => {
   it("uses the containing folder", () => {
@@ -19,5 +19,36 @@ describe("albumFromPath", () => {
 
   it("keeps a folder that merely starts with a disc-like word", () => {
     expect(albumFromPath("/music/Artist/Discovery/01 One More Time.mp3")).toBe("Discovery");
+  });
+});
+
+describe("artistFromPath", () => {
+  const root = "/music";
+
+  it("takes the folder above the album", () => {
+    expect(artistFromPath("/music/System Of A Down/Hypnotize/01 Attack.mp3", root)).toBe(
+      "System Of A Down",
+    );
+  });
+
+  it("agrees for a partly tagged album, so it cannot split in two", () => {
+    const tagged = "/music/System Of A Down/Mezmerize/01 Soldier Side.mp3";
+    const untagged = "/music/System Of A Down/Mezmerize/02 B.Y.O.B.mp3";
+    expect(artistFromPath(untagged, root)).toBe(artistFromPath(tagged, root));
+  });
+
+  it("climbs past a disc subfolder", () => {
+    expect(artistFromPath("/music/Pink Floyd/The Wall/CD2/01 Hey You.flac", root)).toBe(
+      "Pink Floyd",
+    );
+  });
+
+  it("gives up at the library root rather than naming an artist after it", () => {
+    expect(artistFromPath("/music/Some Album/01 Track.mp3", root)).toBeUndefined();
+    expect(artistFromPath("/music/01 Loose Track.mp3", root)).toBeUndefined();
+  });
+
+  it("ignores a root that only looks like a prefix of the path", () => {
+    expect(artistFromPath("/music-backup/Artist/Album/01.mp3", root)).toBeUndefined();
   });
 });

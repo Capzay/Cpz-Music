@@ -36,7 +36,7 @@ export async function processFile(filePath: string) {
   if (existing && existing.mtime === stat.mtimeMs) return;
 
   try {
-    const meta = await extractMetadata(filePath);
+    const meta = await extractMetadata(filePath, musicDir());
 
     const artist = await prisma.artist.upsert({
       where: { name: meta.artist },

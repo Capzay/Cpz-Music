@@ -1,21 +1,23 @@
 import Link from "next/link";
+import { Disc3 } from "lucide-react";
 
 export function AlbumCard({
   id,
   title,
   artist,
-  year,
   hasArtwork,
 }: {
   id: number;
   title: string;
   artist: string;
-  year?: number | null;
   hasArtwork: boolean;
 }) {
   return (
-    <Link href={`/albums/${id}`} className="group block">
-      <div className="aspect-square overflow-hidden rounded-md bg-neutral-900">
+    <Link
+      href={`/albums/${id}`}
+      className="group block cursor-pointer hover:scale-105 transition-transform duration-200"
+    >
+      <div className="aspect-square bg-zinc-800 rounded-md overflow-hidden mb-2 flex items-center justify-center">
         {hasArtwork ? (
           // Plain img: artwork is served from local disk by a route handler, so
           // next/image's optimiser would only add a round trip.
@@ -24,21 +26,17 @@ export function AlbumCard({
             src={`/api/artwork/${id}`}
             alt=""
             loading="lazy"
-            className="h-full w-full object-cover transition group-hover:opacity-85"
+            className="w-full h-full object-cover"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-neutral-700">
-            <svg viewBox="0 0 24 24" className="h-1/3 w-1/3" fill="currentColor" aria-hidden>
-              <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6Z" />
-            </svg>
-          </div>
+          <Disc3
+            size={48}
+            className="text-zinc-600 group-hover:text-zinc-500 transition-colors"
+          />
         )}
       </div>
-      <p className="mt-2 truncate text-sm font-medium">{title}</p>
-      <p className="truncate text-xs text-neutral-500">
-        {artist}
-        {year ? ` · ${year}` : ""}
-      </p>
+      <p className="font-medium text-sm truncate">{title}</p>
+      <p className="text-xs text-zinc-400 truncate">{artist}</p>
     </Link>
   );
 }

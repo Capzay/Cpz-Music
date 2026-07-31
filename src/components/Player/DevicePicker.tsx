@@ -1,86 +1,109 @@
 "use client";
 
-import { useRef } from "react";
+import { useState } from "react";
+import { Cast, Monitor, MonitorSpeaker, Smartphone } from "lucide-react";
 import { usePlayerStore } from "@/store/player";
 import { claimPlayback, renameDevice } from "@/hooks/useSync";
 import { loadDeviceId } from "@/lib/realtime";
+
+function DeviceIcon({ name, size = 16 }: { name: string; size?: number }) {
+  if (/mobile|android|phone|ios/i.test(name)) return <Smartphone size={size} />;
+  if (/desktop|pc|windows|mac|linux/i.test(name)) return <Monitor size={size} />;
+  return <MonitorSpeaker size={size} />;
+}
 
 export function DevicePicker() {
   const devices = usePlayerStore((s) => s.devices);
   const activeDeviceId = usePlayerStore((s) => s.activeDeviceId);
   const isActiveDevice = usePlayerStore((s) => s.isActiveDevice);
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [open, setOpen] = useState(false);
 
   // Nothing to choose between until a second device shows up.
   if (devices.length < 2) return null;
 
-  const active = devices.find((d) => d.deviceId === activeDeviceId);
-
   return (
-    <>
+    <div className="relative">
       <button
-        onClick={() => dialogRef.current?.showModal()}
-        className={`text-xs ${isActiveDevice ? "text-neutral-500" : "text-emerald-400"} hover:text-neutral-200`}
+        onClick={() => setOpen((v) => !v)}
+        title="Devices"
         aria-label="Choose playback device"
+        className={`min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${
+          isActiveDevice ? "text-zinc-400 hover:text-white" : "text-violet-400"
+        }`}
       >
-        {isActiveDevice ? "This device" : (active?.name ?? "Remote")}
+        <Cast size={18} />
       </button>
 
-      <dialog
-        ref={dialogRef}
-        className="m-auto w-full max-w-xs rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-neutral-100 backdrop:bg-black/60"
-      >
-        <p className="mb-3 text-sm font-medium">Play on</p>
-        <ul className="space-y-1">
-          {devices.map((device) => {
-            const isSelf = device.deviceId === loadDeviceId();
-            return (
-              <li key={device.deviceId}>
-                <button
-                  onClick={async () => {
-                    // Only this device can claim for itself; a remote asks by
-                    // sending commands, not by rewriting someone else's presence.
-                    if (isSelf) await claimPlayback();
-                    dialogRef.current?.close();
-                  }}
-                  disabled={!isSelf}
-                  className={`w-full rounded px-3 py-2 text-left text-sm hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40 ${
-                    device.deviceId === activeDeviceId ? "text-emerald-400" : ""
-                  }`}
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+
+          <div className="absolute bottom-full right-0 mb-2 w-64 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden">
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-4 pt-3 pb-1">
+              Devices
+            </p>
+
+            {devices.map((device) => {
+              const isActive = device.deviceId === activeDeviceId;
+              const isSelf = device.deviceId === loadDeviceId();
+
+              return (
+                <div
+                  key={device.deviceId}
+                  className={`flex items-center gap-3 px-4 py-3 ${isActive ? "bg-zinc-700/50" : ""}`}
                 >
-                  <span className="block truncate">
-                    {device.name}
-                    {isSelf ? " (this device)" : ""}
+                  <span className={`flex-shrink-0 ${isActive ? "text-white" : "text-zinc-400"}`}>
+                    <DeviceIcon name={device.name} />
                   </span>
-                  <span className="block text-xs text-neutral-500">{device.platform}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
 
-        <form
-          className="mt-3 flex gap-2"
-          action={async (formData) => {
-            await renameDevice(String(formData.get("name") ?? ""));
-          }}
-        >
-          <input
-            name="name"
-            placeholder="Rename this device"
-            maxLength={40}
-            className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs outline-none focus:border-neutral-500"
-          />
-          <button className="rounded border border-neutral-700 px-2 py-1.5 text-xs">Save</button>
-        </form>
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={`text-sm font-medium truncate ${
+                        isActive ? "text-white" : "text-zinc-300"
+                      }`}
+                    >
+                      {device.name}
+                      {isSelf && <span className="ml-1 text-xs text-zinc-500">(this device)</span>}
+                    </p>
+                    {isActive && <p className="text-xs text-violet-400">Playing</p>}
+                  </div>
 
-        <button
-          onClick={() => dialogRef.current?.close()}
-          className="mt-2 w-full rounded border border-neutral-700 px-3 py-1.5 text-sm"
-        >
-          Close
-        </button>
-      </dialog>
-    </>
+                  {/* Only this device can claim for itself; a remote asks by
+                      sending commands, not by rewriting someone else's presence. */}
+                  {!isActive && isSelf && (
+                    <button
+                      onClick={async () => {
+                        await claimPlayback();
+                        setOpen(false);
+                      }}
+                      className="text-xs text-violet-400 hover:text-violet-300 flex-shrink-0 transition-colors"
+                    >
+                      Listen here
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
+            <form
+              className="flex gap-2 border-t border-zinc-700 p-3"
+              action={async (formData) => {
+                await renameDevice(String(formData.get("name") ?? ""));
+              }}
+            >
+              <input
+                name="name"
+                placeholder="Rename this device"
+                maxLength={40}
+                className="min-w-0 flex-1 rounded border border-zinc-600 bg-zinc-900 px-2 py-1.5 text-xs outline-none focus:border-violet-500"
+              />
+              <button className="rounded border border-zinc-600 px-2 py-1.5 text-xs hover:border-zinc-400">
+                Save
+              </button>
+            </form>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

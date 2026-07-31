@@ -44,7 +44,7 @@ export function Overlay({ token }: { token: string }) {
           track && isPlaying ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="h-16 w-16 shrink-0 overflow-hidden rounded bg-neutral-800">
+        <div className="h-16 w-16 shrink-0 overflow-hidden rounded bg-zinc-800">
           {track?.album.hasArtwork ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={artworkUrl(track.album.id)} alt="" className="h-full w-full object-cover" />
@@ -52,7 +52,7 @@ export function Overlay({ token }: { token: string }) {
         </div>
         <div className="min-w-0 max-w-xs">
           <p className="truncate text-base font-semibold">{track?.title ?? ""}</p>
-          <p className="truncate text-sm text-neutral-300">{track?.artist.name ?? ""}</p>
+          <p className="truncate text-sm text-zinc-300">{track?.artist.name ?? ""}</p>
         </div>
       </div>
     </main>

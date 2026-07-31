@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useDownloads } from "@/store/downloads";
 import { usePlayerStore } from "@/store/player";
 import { formatDuration } from "@/lib/format";
-import { CloseIcon, PlayIcon } from "./Player/icons";
+import { Play, X } from "lucide-react";
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
@@ -30,7 +30,7 @@ export function DownloadsList() {
 
   if (entries.length === 0 && inFlight === 0) {
     return (
-      <p className="text-sm text-neutral-500">
+      <p className="text-sm text-zinc-500">
         Nothing downloaded. Use the Download button on an album to keep it available offline.
       </p>
     );
@@ -38,7 +38,7 @@ export function DownloadsList() {
 
   return (
     <>
-      <div className="mb-4 flex items-center gap-4 text-sm text-neutral-500">
+      <div className="mb-4 flex items-center gap-4 text-sm text-zinc-500">
         <span>
           {entries.length} tracks · {formatBytes(totalBytes)}
         </span>
@@ -51,14 +51,14 @@ export function DownloadsList() {
             onClick={() => {
               if (confirm("Remove all downloaded tracks from this device?")) void clear();
             }}
-            className="ml-auto text-neutral-600 hover:text-red-400"
+            className="ml-auto text-zinc-600 hover:text-red-400"
           >
             Remove all
           </button>
         ) : null}
       </div>
 
-      <ol className="divide-y divide-neutral-900">
+      <ol className="divide-y divide-zinc-900">
         {entries.map(({ track, bytes }) => (
           <li key={track.id} className="group flex items-center gap-3 py-2.5 text-sm">
             <button
@@ -68,23 +68,23 @@ export function DownloadsList() {
               className="flex min-w-0 flex-1 items-center gap-3 text-left"
               aria-label={`Play ${track.title}`}
             >
-              <PlayIcon className="h-3 w-3 shrink-0 text-neutral-600 group-hover:text-neutral-100" />
+              <Play size={14} className="shrink-0 text-zinc-500 group-hover:text-white" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{track.title}</span>
-                <span className="block truncate text-xs text-neutral-500">
+                <span className="block truncate text-xs text-zinc-500">
                   {track.artist.name} · {formatBytes(bytes)}
                 </span>
               </span>
             </button>
-            <span className="shrink-0 tabular-nums text-neutral-500">
+            <span className="shrink-0 tabular-nums text-zinc-500">
               {formatDuration(track.duration)}
             </span>
             <button
               onClick={() => void remove(track.id)}
               aria-label={`Remove ${track.title}`}
-              className="shrink-0 text-neutral-700 opacity-0 transition group-hover:opacity-100 hover:text-red-400"
+              className="shrink-0 text-zinc-700 opacity-0 transition group-hover:opacity-100 hover:text-red-400"
             >
-              <CloseIcon className="h-4 w-4" />
+              <X size={16} />
             </button>
           </li>
         ))}

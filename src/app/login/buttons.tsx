@@ -20,7 +20,7 @@ export function SignInButton() {
     <button
       onClick={signIn}
       disabled={busy}
-      className="w-full rounded-md bg-neutral-100 px-4 py-2.5 text-sm font-medium text-neutral-900 transition hover:bg-white disabled:opacity-50"
+      className="w-full rounded-full bg-violet-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
     >
       {busy ? "Redirecting..." : "Sign in with GitHub"}
     </button>
@@ -36,7 +36,7 @@ export function SignOutButton() {
   return (
     <button
       onClick={signOut}
-      className="w-full rounded-md border border-neutral-700 px-4 py-2.5 text-sm font-medium transition hover:bg-neutral-800"
+      className="w-full rounded-full border border-zinc-600 px-4 py-2.5 text-sm font-medium transition-colors hover:border-zinc-400"
     >
       Sign out
     </button>

@@ -1,3 +1,4 @@
+import { Clock, Mic2, Music, Play } from "lucide-react";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireHost } from "@/lib/auth-server";
@@ -84,111 +85,155 @@ export default async function StatsPage(props: PageProps<"/stats">) {
     select: {
       id: true,
       title: true,
-      album: { select: { id: true } },
+      album: { select: { id: true, artworkPath: true } },
       artist: { select: { name: true } },
     },
   });
   const byId = new Map(tracks.map((t) => [t.id, t]));
 
   const totalSecs = totals._sum.listenSecs ?? 0;
-  const maxSecs = topTrackStats[0]?._sum.listenSecs ?? 0;
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">Stats</h1>
-        <nav className="flex gap-1">
-          {PERIODS.map((p) => (
-            <Link
-              key={p}
-              href={`/stats?period=${p}`}
-              className={`rounded-full px-3 py-1 text-xs capitalize transition ${
-                p === period ? "bg-neutral-800 text-neutral-100" : "text-neutral-500 hover:text-neutral-300"
-              }`}
-            >
-              {p}
-            </Link>
-          ))}
-        </nav>
+      <h1 className="text-xl font-bold mb-4 md:text-2xl md:mb-6">Stats</h1>
+
+      <div className="flex gap-2 mb-5">
+        {PERIODS.map((p) => (
+          <Link
+            key={p}
+            href={`/stats?period=${p}`}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium capitalize transition-colors ${
+              p === period
+                ? "bg-violet-600 text-white"
+                : "bg-zinc-800 text-zinc-400 hover:text-white"
+            }`}
+          >
+            {p}
+          </Link>
+        ))}
       </div>
 
-      <dl className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Listening time" value={formatHours(totalSecs)} />
-        <Stat label="Plays" value={(totals._sum.playCount ?? 0).toLocaleString()} />
-        <Stat label="Tracks" value={uniqueTracks.length.toLocaleString()} />
-        <Stat label="Artists" value={(uniqueArtists ?? 0).toLocaleString()} />
-      </dl>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <StatCard icon={<Clock size={16} />} label="Listening Time" value={formatHours(totalSecs)} />
+        <StatCard
+          icon={<Play size={16} />}
+          label="Total Plays"
+          value={(totals._sum.playCount ?? 0).toLocaleString()}
+        />
+        <StatCard
+          icon={<Music size={16} />}
+          label="Unique Tracks"
+          value={uniqueTracks.length.toLocaleString()}
+        />
+        <StatCard
+          icon={<Mic2 size={16} />}
+          label="Artists"
+          value={(uniqueArtists ?? 0).toLocaleString()}
+        />
+      </div>
 
       {totalSecs === 0 ? (
-        <p className="text-sm text-neutral-500">Nothing listened to in this period yet.</p>
-      ) : (
-        <div className="grid gap-8 lg:grid-cols-2">
-          <section>
-            <h2 className="mb-3 text-sm font-medium text-neutral-400">Top tracks</h2>
-            <ol className="space-y-2">
-              {topTrackStats.map((stat) => {
-                const track = byId.get(stat.trackId);
-                if (!track) return null;
-                const secs = stat._sum.listenSecs ?? 0;
-                return (
-                  <li key={stat.trackId} className="text-sm">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <Link href={`/albums/${track.album.id}`} className="min-w-0 truncate hover:underline">
-                        {track.title}
-                        <span className="text-neutral-500"> · {track.artist.name}</span>
-                      </Link>
-                      <span className="shrink-0 text-xs tabular-nums text-neutral-500">
-                        {formatHours(secs)}
-                      </span>
-                    </div>
-                    <Bar value={secs} max={maxSecs} />
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-
-          <section>
-            <h2 className="mb-3 text-sm font-medium text-neutral-400">Top artists</h2>
-            <ol className="space-y-2">
-              {topArtists.map((artist) => (
-                <li key={artist.artistId} className="text-sm">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <Link
-                      href={`/artists/${artist.artistId}`}
-                      className="min-w-0 truncate hover:underline"
-                    >
-                      {artist.artistName}
-                    </Link>
-                    <span className="shrink-0 text-xs tabular-nums text-neutral-500">
-                      {formatHours(artist.listenSecs)}
-                    </span>
-                  </div>
-                  <Bar value={artist.listenSecs} max={topArtists[0]?.listenSecs ?? 0} />
-                </li>
-              ))}
-            </ol>
-          </section>
+        <div className="text-center py-16 text-zinc-500">
+          <Music size={40} className="mx-auto mb-3 opacity-30" />
+          <p>No listening data for this period yet.</p>
+          <p className="text-sm mt-1">Start playing music to track your stats.</p>
         </div>
+      ) : (
+        <>
+          {topTrackStats.length > 0 && (
+            <section className="mb-6">
+              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+                Top Tracks
+              </h2>
+              <div className="bg-zinc-900 rounded-xl overflow-hidden">
+                {topTrackStats.map((stat, i) => {
+                  const track = byId.get(stat.trackId);
+                  if (!track) return null;
+                  return (
+                    <Link
+                      key={stat.trackId}
+                      href={`/albums/${track.album.id}`}
+                      className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 transition-colors"
+                    >
+                      <span className="text-zinc-600 font-mono text-sm w-5 shrink-0 text-right">
+                        {i + 1}
+                      </span>
+                      <div className="w-9 h-9 rounded bg-zinc-800 shrink-0 overflow-hidden">
+                        {track.album.artworkPath ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={`/api/artwork/${track.album.id}`}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        ) : null}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{track.title}</p>
+                        <p className="text-xs text-zinc-500 truncate">{track.artist.name}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm text-violet-400 font-medium">
+                          {formatHours(stat._sum.listenSecs ?? 0)}
+                        </p>
+                        <p className="text-xs text-zinc-600">{stat._sum.playCount ?? 0} plays</p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {topArtists.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+                Top Artists
+              </h2>
+              <div className="bg-zinc-900 rounded-xl overflow-hidden">
+                {topArtists.map((artist, i) => (
+                  <Link
+                    key={artist.artistId}
+                    href={`/artists/${artist.artistId}`}
+                    className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 transition-colors"
+                  >
+                    <span className="text-zinc-600 font-mono text-sm w-5 shrink-0 text-right">
+                      {i + 1}
+                    </span>
+                    <div className="w-9 h-9 rounded-full bg-violet-900/40 flex items-center justify-center shrink-0">
+                      <Mic2 size={16} className="text-violet-400" />
+                    </div>
+                    <p className="flex-1 text-sm font-medium truncate">{artist.artistName}</p>
+                    <p className="text-sm text-violet-400 font-medium shrink-0">
+                      {formatHours(artist.listenSecs)}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function StatCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
-    <div className="rounded-lg border border-neutral-900 p-3">
-      <dt className="text-xs text-neutral-500">{label}</dt>
-      <dd className="mt-1 text-lg font-semibold tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-function Bar({ value, max }: { value: number; max: number }) {
-  const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
-  return (
-    <div className="mt-1 h-1 w-full rounded-full bg-neutral-900">
-      <div className="h-full rounded-full bg-neutral-600" style={{ width: `${pct}%` }} />
+    <div className="bg-zinc-900 rounded-xl p-4">
+      <div className="flex items-center gap-1.5 text-violet-400 mb-2">
+        {icon}
+        <span className="text-xs font-medium">{label}</span>
+      </div>
+      <p className="text-lg font-bold leading-tight">{value}</p>
     </div>
   );
 }

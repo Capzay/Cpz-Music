@@ -1,61 +1,108 @@
 "use client";
 
-import { usePlayerStore } from "@/store/player";
-import { formatDuration } from "@/lib/format";
-import { CloseIcon } from "./icons";
+import { X } from "lucide-react";
+import { usePlayerStore, useCurrentTrack } from "@/store/player";
+import { artworkUrl, type PlayerTrack } from "@/lib/types";
 
-export function QueuePanel({ onClose }: { onClose: () => void }) {
+/** What is still to come, in the order it will actually play. */
+export function useUpcoming(): { track: PlayerTrack; queueIdx: number }[] {
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
+  const shuffle = usePlayerStore((s) => s.shuffle);
+  const shuffleOrder = usePlayerStore((s) => s.shuffleOrder);
+  const shufflePos = usePlayerStore((s) => s.shufflePos);
+
+  if (shuffle && shuffleOrder.length > 0) {
+    return shuffleOrder
+      .slice(shufflePos + 1)
+      .map((i) => ({ track: queue[i], queueIdx: i }))
+      .filter((x) => x.track);
+  }
+  return queue.slice(index + 1).map((track, i) => ({ track, queueIdx: index + 1 + i }));
+}
+
+export function Thumb({ track, size = "w-8 h-8" }: { track: PlayerTrack; size?: string }) {
+  return (
+    <div className={`${size} bg-zinc-800 rounded overflow-hidden flex-shrink-0`}>
+      {track.album.hasArtwork ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={artworkUrl(track.album.id)} alt="" className="w-full h-full object-cover" />
+      ) : null}
+    </div>
+  );
+}
+
+export function QueuePanel({ onClose }: { onClose: () => void }) {
   const dispatch = usePlayerStore((s) => s.dispatch);
+  const currentTrack = useCurrentTrack();
+  const upcoming = useUpcoming();
 
   return (
-    <aside
-      className="fixed inset-y-0 right-0 z-40 flex w-full max-w-sm flex-col border-l border-neutral-900 bg-neutral-950 shadow-2xl"
+    <div
+      className="fixed right-0 bottom-20 w-72 bg-zinc-900 border border-zinc-700 rounded-t-lg shadow-2xl z-50 max-h-[60vh] flex flex-col"
       aria-label="Play queue"
     >
-      <header className="flex items-center justify-between border-b border-neutral-900 p-4">
-        <h2 className="text-sm font-medium">Queue</h2>
-        <button onClick={onClose} aria-label="Close queue" className="text-neutral-500 hover:text-neutral-200">
-          <CloseIcon className="h-5 w-5" />
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 flex-shrink-0">
+        <span className="text-sm font-semibold">Queue</span>
+        <button
+          onClick={onClose}
+          aria-label="Close queue"
+          className="text-zinc-400 hover:text-white transition-colors"
+        >
+          <X size={16} />
         </button>
-      </header>
+      </div>
 
-      <ol className="flex-1 overflow-y-auto p-2">
-        {queue.length === 0 ? (
-          <li className="p-4 text-sm text-neutral-500">Nothing queued.</li>
+      {currentTrack && (
+        <div className="px-4 py-2 border-b border-zinc-800 flex-shrink-0">
+          <p className="text-xs text-zinc-500 mb-1 uppercase tracking-wide">Now playing</p>
+          <div className="flex items-center gap-2">
+            <Thumb track={currentTrack} />
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate text-violet-400">{currentTrack.title}</p>
+              <p className="text-xs text-zinc-400 truncate">{currentTrack.artist.name}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-y-auto flex-1">
+        {upcoming.length === 0 ? (
+          <p className="text-zinc-500 text-sm px-4 py-4">Nothing up next</p>
         ) : (
-          queue.map((track, i) => (
-            <li key={`${track.id}-${i}`} className="group flex items-center gap-3 rounded-md px-2 py-2">
-              <button
-                onClick={() => dispatch({ type: "jumpTo", index: i })}
-                className="min-w-0 flex-1 text-left"
+          <>
+            <p className="text-xs text-zinc-500 px-4 pt-2 pb-1 uppercase tracking-wide">
+              Next up · {upcoming.length}
+            </p>
+            {upcoming.map(({ track, queueIdx }) => (
+              <div
+                key={`${track.id}-${queueIdx}`}
+                className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-800/50 group"
               >
-                <span
-                  className={`block truncate text-sm ${
-                    i === index ? "text-neutral-100" : "text-neutral-300"
-                  }`}
-                >
-                  {track.title}
-                </span>
-                <span className="block truncate text-xs text-neutral-500">{track.artist.name}</span>
-              </button>
-              <span className="shrink-0 text-xs tabular-nums text-neutral-600">
-                {formatDuration(track.duration)}
-              </span>
-              {i !== index ? (
                 <button
-                  onClick={() => dispatch({ type: "removeFromQueue", index: i })}
-                  aria-label={`Remove ${track.title} from queue`}
-                  className="shrink-0 text-neutral-700 opacity-0 transition group-hover:opacity-100 hover:text-neutral-300"
+                  onClick={() => dispatch({ type: "jumpTo", index: queueIdx })}
+                  className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                  aria-label={`Play ${track.title}`}
                 >
-                  <CloseIcon className="h-4 w-4" />
+                  <Thumb track={track} size="w-7 h-7" />
+                  <span className="min-w-0">
+                    <span className="block text-sm truncate">{track.title}</span>
+                    <span className="block text-xs text-zinc-400 truncate">{track.artist.name}</span>
+                  </span>
                 </button>
-              ) : null}
-            </li>
-          ))
+                <button
+                  onClick={() => dispatch({ type: "removeFromQueue", index: queueIdx })}
+                  title="Remove from queue"
+                  aria-label={`Remove ${track.title} from queue`}
+                  className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 transition-all p-1"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </>
         )}
-      </ol>
-    </aside>
+      </div>
+    </div>
   );
 }

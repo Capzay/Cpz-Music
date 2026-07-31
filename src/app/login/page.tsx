@@ -1,3 +1,4 @@
+import { Music2 } from "lucide-react";
 import { getIdentity } from "@/lib/auth-server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -26,13 +27,16 @@ export default async function LoginPage({
     <main className="flex min-h-dvh items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-6 text-center">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Cpz Music</h1>
-          <p className="text-sm text-neutral-500">Self-hosted personal music streamer</p>
+          <div className="flex items-center justify-center gap-2">
+            <Music2 size={26} className="text-violet-400" />
+            <h1 className="text-2xl font-bold tracking-tight">Cpz Music</h1>
+          </div>
+          <p className="text-sm text-zinc-500">Self-hosted personal music streamer</p>
         </div>
 
         {signedInStranger ? (
           <div className="space-y-4">
-            <p className="text-sm text-neutral-400">
+            <p className="text-sm text-zinc-400">
               You are signed in, but this library belongs to someone else.
             </p>
             <SignOutButton />

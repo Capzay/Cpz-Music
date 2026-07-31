@@ -30,15 +30,15 @@ export function PlaylistHeader({
             required
             maxLength={120}
             autoFocus
-            className="flex-1 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-neutral-600"
+            className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-zinc-600"
           />
-          <button className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900">
+          <button className="rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500">
             Save
           </button>
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="rounded-md border border-neutral-800 px-3 py-2 text-sm"
+            className="rounded-md border border-zinc-800 px-3 py-2 text-sm"
           >
             Cancel
           </button>
@@ -48,13 +48,13 @@ export function PlaylistHeader({
           <h1 className="text-2xl font-semibold tracking-tight">{name}</h1>
           <button
             onClick={() => setEditing(true)}
-            className="text-xs text-neutral-500 hover:text-neutral-200"
+            className="text-xs text-zinc-500 hover:text-zinc-200"
           >
             Rename
           </button>
           <form action={deletePlaylist.bind(null, id)}>
             <button
-              className="text-xs text-neutral-600 hover:text-red-400"
+              className="text-xs text-zinc-600 hover:text-red-400"
               onClick={(e) => {
                 // A playlist is not recoverable, and the button sits next to Rename.
                 if (!confirm(`Delete "${name}"?`)) e.preventDefault();
@@ -65,7 +65,7 @@ export function PlaylistHeader({
           </form>
         </div>
       )}
-      <p className="mt-1 text-sm text-neutral-500">{count} tracks</p>
+      <p className="mt-1 text-sm text-zinc-500">{count} tracks</p>
     </header>
   );
 }

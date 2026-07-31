@@ -25,7 +25,7 @@ export default async function JamPage(props: PageProps<"/jam">) {
     return (
       <Shell>
         <h1 className="text-lg font-medium">Jam</h1>
-        <p className="mt-2 text-sm text-neutral-400">
+        <p className="mt-2 text-sm text-zinc-400">
           {error ?? "Open the invite link you were sent to join."}
         </p>
       </Shell>
@@ -41,7 +41,7 @@ export default async function JamPage(props: PageProps<"/jam">) {
     return (
       <Shell>
         <h1 className="text-lg font-medium">Jam ended</h1>
-        <p className="mt-2 text-sm text-neutral-400">The host has closed this jam.</p>
+        <p className="mt-2 text-sm text-zinc-400">The host has closed this jam.</p>
       </Shell>
     );
   }
@@ -50,7 +50,7 @@ export default async function JamPage(props: PageProps<"/jam">) {
     return (
       <Shell>
         <h1 className="text-lg font-medium">Removed</h1>
-        <p className="mt-2 text-sm text-neutral-400">The host removed you from this jam.</p>
+        <p className="mt-2 text-sm text-zinc-400">The host removed you from this jam.</p>
       </Shell>
     );
   }
@@ -59,7 +59,7 @@ export default async function JamPage(props: PageProps<"/jam">) {
     return (
       <Shell>
         <h1 className="text-lg font-medium">Waiting to be let in</h1>
-        <p className="mt-2 text-sm text-neutral-400">
+        <p className="mt-2 text-sm text-zinc-400">
           {identity.name}, the host has to admit you before you can add tracks.
         </p>
       </Shell>

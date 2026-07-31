@@ -15,7 +15,7 @@ export default async function ObsPage(props: PageProps<"/obs">) {
   const identity = await getIdentity();
   if (identity.role !== "host" && !verifyToken(value, "obs")) {
     return (
-      <main className="p-6 text-sm text-neutral-500">
+      <main className="p-6 text-sm text-zinc-500">
         This overlay link is missing or expired. Generate a new one from Settings.
       </main>
     );

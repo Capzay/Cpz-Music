@@ -39,7 +39,7 @@ export default async function PlaylistPage(props: PageProps<"/playlists/[id]">) 
           <DownloadButton tracks={entries.map((e) => e.track)} />
         </div>
       ) : (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-zinc-500">
           Empty. Add tracks from an album or from search.
         </p>
       )}

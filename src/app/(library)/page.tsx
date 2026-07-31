@@ -1,47 +1,26 @@
 import { prisma } from "@/lib/db";
-import { AlbumCard } from "@/components/AlbumCard";
+import { toPlayerTrack, trackSelect } from "@/lib/types";
+import { TrackList } from "@/components/TrackList";
 
-export const metadata = { title: "Albums" };
+export const metadata = { title: "Library" };
 
-export default async function AlbumsPage() {
-  const albums = await prisma.album.findMany({
-    orderBy: [{ artist: { name: "asc" } }, { year: "asc" }, { title: "asc" }],
-    select: {
-      id: true,
-      title: true,
-      year: true,
-      artworkPath: true,
-      artist: { select: { name: true } },
-    },
-  });
-
-  if (albums.length === 0) {
-    return (
-      <div className="py-16 text-center">
-        <h1 className="text-lg font-medium">No music yet</h1>
-        <p className="mt-2 text-sm text-neutral-500">
-          Point <code className="text-neutral-400">MUSIC_DIR</code> at your library and restart the
-          server. Scanning starts automatically.
-        </p>
-      </div>
-    );
-  }
+export default async function LibraryPage() {
+  const [tracks, playlists] = await Promise.all([
+    prisma.track.findMany({
+      orderBy: [{ artist: { name: "asc" } }, { album: { year: "asc" } }, { discNumber: "asc" }, { trackNumber: "asc" }],
+      select: trackSelect,
+    }),
+    prisma.playlist.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
 
   return (
     <>
-      <h1 className="mb-5 text-xl font-semibold tracking-tight">Albums</h1>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-        {albums.map((album) => (
-          <AlbumCard
-            key={album.id}
-            id={album.id}
-            title={album.title}
-            artist={album.artist.name}
-            year={album.year}
-            hasArtwork={Boolean(album.artworkPath)}
-          />
-        ))}
-      </div>
+      <h1 className="text-xl font-bold mb-4 md:text-2xl md:mb-6">Library</h1>
+      {tracks.length === 0 ? (
+        <p className="text-zinc-400">No tracks found. Check your music directory.</p>
+      ) : (
+        <TrackList tracks={tracks.map(toPlayerTrack)} playlists={playlists} />
+      )}
     </>
   );
 }

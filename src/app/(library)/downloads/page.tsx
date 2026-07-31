@@ -9,7 +9,7 @@ export const metadata = { title: "Downloads" };
 export default function DownloadsPage() {
   return (
     <>
-      <h1 className="mb-5 text-xl font-semibold tracking-tight">Downloads</h1>
+      <h1 className="text-xl font-bold mb-4 md:text-2xl md:mb-6">Downloads</h1>
       <DownloadsList />
     </>
   );

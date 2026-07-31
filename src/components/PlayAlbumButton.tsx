@@ -1,8 +1,8 @@
 "use client";
 
+import { Play, Shuffle } from "lucide-react";
 import { usePlayerStore } from "@/store/player";
 import type { PlayerTrack } from "@/lib/types";
-import { PlayIcon, ShuffleIcon } from "./Player/icons";
 
 export function PlayAlbumButton({ tracks }: { tracks: PlayerTrack[] }) {
   const dispatch = usePlayerStore((s) => s.dispatch);
@@ -13,10 +13,10 @@ export function PlayAlbumButton({ tracks }: { tracks: PlayerTrack[] }) {
     <div className="flex gap-2">
       <button
         onClick={() => dispatch({ type: "setQueue", tracks, startIndex: 0 })}
-        className="flex items-center gap-2 rounded-full bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-white"
+        className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors"
       >
-        <PlayIcon className="h-3.5 w-3.5" />
-        Play
+        <Play size={16} fill="white" />
+        Play All
       </button>
       <button
         onClick={() => {
@@ -30,9 +30,9 @@ export function PlayAlbumButton({ tracks }: { tracks: PlayerTrack[] }) {
             startIndex: Math.floor(Math.random() * tracks.length),
           });
         }}
-        className="flex items-center gap-2 rounded-full border border-neutral-700 px-4 py-2 text-sm font-medium transition hover:border-neutral-500"
+        className="flex items-center gap-2 border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-4 py-2 rounded-full text-sm font-medium transition-colors"
       >
-        <ShuffleIcon className="h-3.5 w-3.5" />
+        <Shuffle size={16} />
         Shuffle
       </button>
     </div>

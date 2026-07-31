@@ -3,18 +3,14 @@ package uk.capzay.music;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.webkit.CookieManager;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebView;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.BridgeWebViewClient;
 
 public class MainActivity extends BridgeActivity {
 
@@ -52,35 +48,16 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    /**
+     * Capacitor's own client already sends anything outside the server host and
+     * `server.allowNavigation` to the system browser, so overriding it here only
+     * dropped the allowlist on the floor and pushed the sign-in hop out of the
+     * app. Cookies still need turning on by hand.
+     */
     private void setupWebView() {
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(getBridge().getWebView(), true);
-
-        // Taken from capacitor.config.ts rather than hardcoded, so pointing the
-        // app at a different deployment does not mean editing Java.
-        final String serverHost = serverHost();
-
-        getBridge().getWebView().setWebViewClient(new BridgeWebViewClient(getBridge()) {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                Uri uri = request.getUrl();
-                if (serverHost != null && serverHost.equals(uri.getHost())) return false;
-                // Anything else belongs to somebody else. Hand it to the browser
-                // rather than navigating this authenticated WebView there.
-                startActivity(new Intent(Intent.ACTION_VIEW, uri));
-                return true;
-            }
-        });
-    }
-
-    private String serverHost() {
-        try {
-            String url = getBridge().getConfig().getServerUrl();
-            return url == null ? null : Uri.parse(url).getHost();
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     private void requestNotificationPermission() {

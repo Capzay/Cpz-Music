@@ -15,6 +15,10 @@ const config: CapacitorConfig = {
     // No plaintext HTTP: the session cookie would be readable on any shared
     // network, and Android's own default is to forbid it.
     cleartext: false,
+    // The sign-in hop has to stay inside the WebView. Handing it to the system
+    // browser logs the browser in instead of the app: the two have separate
+    // cookie jars, and the PKCE verifier is in the WebView's.
+    allowNavigation: ["*.supabase.co", "github.com", "*.github.com"],
   },
   android: {
     allowMixedContent: false,

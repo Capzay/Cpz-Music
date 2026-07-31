@@ -58,7 +58,9 @@ export async function processFile(filePath: string) {
       update: {},
     });
 
-    if (meta.artwork && !album.artworkPath) {
+    // Also re-saves when the row points at a file that is no longer there, so a
+    // cover lost to a cleared artwork directory comes back on the next scan.
+    if (meta.artwork && (!album.artworkPath || !fs.existsSync(album.artworkPath))) {
       const artworkPath = await saveArtwork(
         album.id,
         meta.artwork,
@@ -91,28 +93,50 @@ export async function processFile(filePath: string) {
   }
 }
 
-async function walk(dir: string): Promise<string[]> {
-  const found: string[] = [];
+/**
+ * `complete` is false when any directory could not be read. A partial listing
+ * must never be treated as the truth about what is on disk: the caller deletes
+ * everything it does not see, and that cascades into playlists and stats.
+ */
+async function walk(dir: string): Promise<{ files: string[]; complete: boolean }> {
+  const files: string[] = [];
+  let complete = true;
   let entries;
   try {
     entries = await fsp.readdir(dir, { withFileTypes: true });
   } catch (err) {
     console.error(`[scanner] cannot read ${dir}:`, err);
-    return found;
+    return { files, complete: false };
   }
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...(await walk(full)));
-    else if (SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
-      found.push(full);
+    if (entry.isDirectory()) {
+      const sub = await walk(full);
+      files.push(...sub.files);
+      if (!sub.complete) complete = false;
+    } else if (SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+      files.push(full);
     }
   }
-  return found;
+  return { files, complete };
 }
 
-/** Removes albums and artists left with nothing after tracks disappear. */
+/**
+ * Removes albums and artists left with nothing after tracks disappear, along
+ * with the cover files of the albums going away. Leaving those behind fills the
+ * artwork directory with images no album will ever claim again.
+ */
 async function pruneEmpty() {
-  await prisma.album.deleteMany({ where: { tracks: { none: {} } } });
+  const orphans = await prisma.album.findMany({
+    where: { tracks: { none: {} } },
+    select: { id: true, artworkPath: true },
+  });
+  if (orphans.length > 0) {
+    await prisma.album.deleteMany({ where: { id: { in: orphans.map((o) => o.id) } } });
+    for (const { artworkPath } of orphans) {
+      if (artworkPath) await fsp.rm(artworkPath, { force: true }).catch(() => {});
+    }
+  }
   await prisma.artist.deleteMany({
     where: { tracks: { none: {} }, albums: { none: {} } },
   });
@@ -121,7 +145,7 @@ async function pruneEmpty() {
 export async function scanLibrary() {
   const root = musicDir();
   console.log(`[scanner] scanning ${root}`);
-  const files = await walk(root);
+  const { files, complete } = await walk(root);
   console.log(`[scanner] found ${files.length} audio files`);
 
   for (let i = 0; i < files.length; i++) {
@@ -132,6 +156,23 @@ export async function scanLibrary() {
   const known = await prisma.track.findMany({ select: { id: true, filePath: true } });
   const onDisk = new Set(files);
   const stale = known.filter((t) => !onDisk.has(t.filePath)).map((t) => t.id);
+
+  // Deleting a track takes its playlist entries and listening history with it,
+  // so the two ways a scan can be wrong about the disk both stop here: a
+  // directory that would not open, and a library that came back empty when the
+  // database says it should not be. Both mean a broken mount or a bad
+  // MUSIC_DIR far more often than they mean somebody deleted their music.
+  const emptyButShouldNotBe = files.length === 0 && known.length > 0;
+  if (!complete || emptyButShouldNotBe) {
+    console.error(
+      `[scanner] skipping cleanup: ${
+        complete ? "the library scanned empty but the database holds tracks" : "part of the library could not be read"
+      }. ${stale.length} tracks left untouched.`,
+    );
+    console.log("[scanner] scan complete");
+    return;
+  }
+
   if (stale.length > 0) {
     await prisma.track.deleteMany({ where: { id: { in: stale } } });
     console.log(`[scanner] removed ${stale.length} tracks no longer on disk`);

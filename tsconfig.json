@@ -30,5 +30,13 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Separate workspaces with their own deps and their own typecheck: the
+    // desktop wrapper runs `tsc --noEmit` in CI, and `cap sync` parses the
+    // mobile config. Their deps are not installed here, so sweeping them in
+    // only produces "cannot find module electron/@capacitor/cli".
+    "electron",
+    "mobile"
+  ]
 }

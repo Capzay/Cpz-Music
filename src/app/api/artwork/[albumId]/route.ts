@@ -17,6 +17,8 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/artwork/
   const contentType = album.artworkPath.endsWith(".png") ? "image/png" : "image/jpeg";
 
   return fileResponse(album.artworkPath, artworkDir(), contentType, request.headers.get("range"), {
-    "Cache-Control": "private, max-age=604800",
+    // Short: the URL is keyed by album id, so a rescan replaces the image
+    // behind it. A week of browser cache outlived several rescans.
+    "Cache-Control": "private, max-age=86400",
   });
 }

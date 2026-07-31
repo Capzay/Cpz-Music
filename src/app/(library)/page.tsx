@@ -19,7 +19,7 @@ export default async function LibraryPage() {
       {tracks.length === 0 ? (
         <p className="text-zinc-400">No tracks found. Check your music directory.</p>
       ) : (
-        <TrackList tracks={tracks.map(toPlayerTrack)} playlists={playlists} />
+        <TrackList tracks={tracks.map(toPlayerTrack)} playlists={playlists} numbered={false} />
       )}
     </>
   );

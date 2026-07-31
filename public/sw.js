@@ -5,7 +5,10 @@
  *  - cpz-pages-v1   : server-rendered HTML, network-first with a cache fallback
  *  - cpz-audio-v1   : explicitly downloaded tracks, served with Range support
  *                     so seeking works offline
- *  - cpz-artwork-v1 : album art, cache-first
+ *  - cpz-artwork-v2 : album art, stale-while-revalidate. The URL is keyed by
+ *                     album id, not by content, so a rescan changes the bytes
+ *                     behind a URL we already hold. Cache-first would serve the
+ *                     old cover until someone cleared the cache by hand.
  *
  * Nothing authenticated or live is cached: no stats, no jam, no now-playing.
  */
@@ -13,7 +16,7 @@
 const STATIC_CACHE = "cpz-static-v1";
 const PAGE_CACHE = "cpz-pages-v1";
 const AUDIO_CACHE = "cpz-audio-v1";
-const ARTWORK_CACHE = "cpz-artwork-v1";
+const ARTWORK_CACHE = "cpz-artwork-v2";
 
 const KNOWN = [STATIC_CACHE, PAGE_CACHE, AUDIO_CACHE, ARTWORK_CACHE];
 
@@ -50,7 +53,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (ARTWORK_RE.test(url.pathname)) {
-    event.respondWith(cacheFirst(request, ARTWORK_CACHE));
+    event.respondWith(staleWhileRevalidate(event, ARTWORK_CACHE));
     return;
   }
   if (url.pathname.startsWith("/_next/static/")) {
@@ -103,6 +106,29 @@ async function cacheFirst(request, cacheName) {
   const response = await fetch(request);
   if (response.ok) cache.put(request.url, response.clone()).catch(() => {});
   return response;
+}
+
+/**
+ * Answers from cache immediately, then refreshes the entry in the background so
+ * the next load gets the new bytes. One stale paint after a rescan, rather than
+ * a stale cover forever.
+ */
+async function staleWhileRevalidate(event, cacheName) {
+  const request = event.request;
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request.url);
+
+  const fetched = fetch(request).then((response) => {
+    if (response.ok) cache.put(request.url, response.clone()).catch(() => {});
+    return response;
+  });
+
+  if (!cached) return fetched;
+
+  // respondWith settles straight away with the cached copy, so without
+  // waitUntil the worker can be shut down before the refresh lands.
+  event.waitUntil(fetched.catch(() => {}));
+  return cached;
 }
 
 /**

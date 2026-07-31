@@ -77,7 +77,7 @@ export default async function ArtistPage(props: PageProps<"/artists/[id]">) {
 
       <div>
         <h2 className="text-lg font-semibold mb-3">All Tracks</h2>
-        <TrackList tracks={playerTracks} playlists={playlists} />
+        <TrackList tracks={playerTracks} playlists={playlists} numbered={false} />
       </div>
     </>
   );

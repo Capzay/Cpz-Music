@@ -3,7 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireHost } from "@/lib/auth-server";
-import { createJam, endJam, getActiveJam, rotateInvite, setParticipantStatus } from "@/lib/jam";
+import {
+  broadcastJamChange,
+  createJam,
+  endJam,
+  getActiveJam,
+  rotateInvite,
+  setParticipantStatus,
+} from "@/lib/jam";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export async function startJam(formData: FormData) {
@@ -21,6 +28,7 @@ export async function stopJam() {
   // Revoke every guest session's claims, so ending a jam actually locks guests
   // out rather than leaving valid JWTs floating around until they expire.
   await revokeGuests(jam.id);
+  await broadcastJamChange();
   revalidatePath("/settings");
 }
 
@@ -35,6 +43,7 @@ export async function admitGuest(pid: string) {
   await requireHost();
   const jam = await getActiveJam();
   if (jam) await setParticipantStatus(jam.id, pid, "admitted");
+  await broadcastJamChange();
   revalidatePath("/settings");
 }
 
@@ -46,6 +55,7 @@ export async function kickGuest(pid: string) {
   await setParticipantStatus(jam.id, pid, "kicked");
   const participant = await prisma.jamParticipant.findUnique({ where: { id: pid } });
   if (participant?.userId) await clearClaims(participant.userId);
+  await broadcastJamChange();
   revalidatePath("/settings");
 }
 

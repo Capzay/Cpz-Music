@@ -29,12 +29,19 @@ export function JamPanel({
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
-  // Someone opening the invite link does not notify this page, so poll while a
-  // jam is running. Cheap, and only while the panel is actually on screen.
+  // The server broadcasts on the player channel when someone joins, and the sync
+  // hook turns that into this event. The slow poll stays as a safety net: the
+  // broadcast is fire-and-forget, so a dropped one should cost seconds, not the
+  // rest of the party.
   useEffect(() => {
     if (!jam) return;
-    const timer = setInterval(() => router.refresh(), 5000);
-    return () => clearInterval(timer);
+    const refresh = () => router.refresh();
+    window.addEventListener("cpz-jam", refresh);
+    const timer = setInterval(refresh, 15_000);
+    return () => {
+      window.removeEventListener("cpz-jam", refresh);
+      clearInterval(timer);
+    };
   }, [jam, router]);
 
   if (!jam) {

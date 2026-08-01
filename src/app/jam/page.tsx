@@ -3,6 +3,7 @@ import { getIdentity } from "@/lib/auth-server";
 import { getActiveJam, getParticipant } from "@/lib/jam";
 import { toPlayerTrack, trackSelect } from "@/lib/types";
 import { GuestApp } from "./GuestApp";
+import { JamLive } from "./JamLive";
 
 export const metadata = { title: "Jam" };
 
@@ -58,6 +59,7 @@ export default async function JamPage(props: PageProps<"/jam">) {
   if (participant?.status !== "admitted") {
     return (
       <Shell>
+        <JamLive />
         <h1 className="text-lg font-medium">Waiting to be let in</h1>
         <p className="mt-2 text-sm text-zinc-400">
           {identity.name}, the host has to admit you before you can add tracks.
@@ -82,17 +84,20 @@ export default async function JamPage(props: PageProps<"/jam">) {
   });
 
   return (
-    <GuestApp
-      name={identity.name}
-      hostName={jam.hostName}
-      albums={albums.map((album) => ({
-        id: album.id,
-        title: album.title,
-        artist: album.artist.name,
-        hasArtwork: Boolean(album.artworkPath),
-        tracks: album.tracks.map(toPlayerTrack),
-      }))}
-    />
+    <>
+      <JamLive showNowPlaying />
+      <GuestApp
+        name={identity.name}
+        hostName={jam.hostName}
+        albums={albums.map((album) => ({
+          id: album.id,
+          title: album.title,
+          artist: album.artist.name,
+          hasArtwork: Boolean(album.artworkPath),
+          tracks: album.tracks.map(toPlayerTrack),
+        }))}
+      />
+    </>
   );
 }
 

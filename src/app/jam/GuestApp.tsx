@@ -55,7 +55,8 @@ export function GuestApp({
     : albums;
 
   return (
-    <main className="mx-auto max-w-2xl p-4">
+    // Bottom pad clears the now-playing bar and the home indicator.
+    <main className="mx-auto max-w-2xl p-4 pb-[calc(6rem+env(safe-area-inset-bottom))]">
       <header className="mb-5">
         <h1 className="text-xl font-bold md:text-2xl">
           {hostName ? `${hostName}'s jam` : "Jam"}

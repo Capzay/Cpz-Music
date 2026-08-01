@@ -80,7 +80,14 @@ export function useSync() {
         // Sent by the server on a guest's behalf; guests cannot broadcast here.
         if (!usePlayerStore.getState().isActiveDevice) return;
         const { track } = payload as { track: PlayerTrack };
-        if (track) usePlayerStore.getState().apply({ type: "addToQueue", track });
+        // Play next, not append: at a party the queue is long and a guest's pick
+        // landing at the end of it never gets heard.
+        if (track) usePlayerStore.getState().apply({ type: "playNext", track });
+      })
+      .on("broadcast", { event: "jam" }, () => {
+        // Participant list changed. The panel that cares may not be mounted, and
+        // this hook has no router, so let it decide.
+        window.dispatchEvent(new Event("cpz-jam"));
       })
       .on("broadcast", { event: "cmd" }, ({ payload }) => {
         const { target, command } = payload as { target: string; command: Command };

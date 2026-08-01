@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseServer, supabaseAdmin } from "@/lib/supabase/server";
-import { joinJam, readInvite } from "@/lib/jam";
+import { broadcastJamChange, joinJam, readInvite } from "@/lib/jam";
 import { identityFromUser } from "@/lib/auth";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
 import { requestOrigin } from "@/lib/origin";
@@ -68,6 +68,8 @@ export async function GET(request: NextRequest) {
   // The JWT in hand predates the metadata write, so mint a fresh one or the
   // guest's very next request would look like an ordinary anonymous user.
   await supabase.auth.refreshSession();
+
+  await broadcastJamChange();
 
   return NextResponse.redirect(new URL("/jam", origin));
 }

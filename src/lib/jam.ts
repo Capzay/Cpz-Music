@@ -102,6 +102,15 @@ export async function setParticipantStatus(jamId: string, pid: string, status: s
 }
 
 /**
+ * Tells every jam client the participant list moved: someone asked to join, was
+ * admitted, was removed, or the jam ended. Both sides re-read the server rather
+ * than trusting the payload, so one event covers all four cases.
+ */
+export function broadcastJamChange() {
+  return broadcastToPlayer("jam", {});
+}
+
+/**
  * Pushes an event onto the player channel from the server.
  *
  * Guests are barred from broadcasting by the Realtime policy, deliberately, so

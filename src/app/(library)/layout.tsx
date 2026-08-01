@@ -21,7 +21,8 @@ export default async function LibraryLayout({ children }: { children: React.Reac
       <ServiceWorker />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar playlists={playlists} />
-        <main className="flex-1 overflow-y-auto px-3 py-4 pb-32 md:px-6 md:py-6 md:pb-24">
+        {/* The bottom pad has to clear the player, the nav, and the home indicator. */}
+        <main className="flex-1 overflow-y-auto px-3 py-4 pb-[calc(9rem+env(safe-area-inset-bottom))] md:px-6 md:py-6 md:pb-24">
           {children}
         </main>
       </div>

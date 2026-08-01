@@ -135,13 +135,36 @@ export function MobilePlayer({ onClose }: { onClose: () => void }) {
         <div className="absolute inset-0 z-10 bg-zinc-950 flex flex-col px-6 pt-safe">
           <div className="flex items-center justify-between pt-4 pb-4">
             <span className="text-lg font-semibold">Queue</span>
-            <button
-              onClick={() => setShowQueue(false)}
-              aria-label="Close queue"
-              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
-            >
-              <X size={24} />
-            </button>
+            <div className="flex items-center">
+              {/* The overlay hides the player controls, so these live here too. */}
+              <button
+                onClick={() => dispatch({ type: "toggleShuffle" })}
+                aria-label="Shuffle"
+                aria-pressed={shuffle}
+                className={`min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${
+                  shuffle ? "text-violet-400" : "text-zinc-400"
+                }`}
+              >
+                <Shuffle size={20} />
+              </button>
+              <button
+                onClick={() => dispatch({ type: "cycleRepeat" })}
+                aria-label={`Repeat: ${repeat}`}
+                aria-pressed={repeat !== "off"}
+                className={`min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${
+                  repeat !== "off" ? "text-violet-400" : "text-zinc-400"
+                }`}
+              >
+                {repeat === "one" ? <Repeat1 size={20} /> : <Repeat size={20} />}
+              </button>
+              <button
+                onClick={() => setShowQueue(false)}
+                aria-label="Close queue"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
           </div>
 
           <div className="pb-3 border-b border-zinc-800 mb-3">

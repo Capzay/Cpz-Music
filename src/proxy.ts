@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { identityFromUser, isGuestAllowed } from "@/lib/auth";
+import { requestOrigin } from "@/lib/origin";
 
 /**
  * Reachable without a session. Everything else needs one.
@@ -65,10 +66,7 @@ export async function proxy(request: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const login = request.nextUrl.clone();
-    login.pathname = "/login";
-    login.search = "";
-    return NextResponse.redirect(login);
+    return NextResponse.redirect(new URL("/login", requestOrigin(request.headers)));
   }
 
   if (identity.role === "guest") {
@@ -78,10 +76,7 @@ export async function proxy(request: NextRequest) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Forbidden in jam guest mode" }, { status: 403 });
       }
-      const jam = request.nextUrl.clone();
-      jam.pathname = "/jam";
-      jam.search = "";
-      return NextResponse.redirect(jam);
+      return NextResponse.redirect(new URL("/jam", requestOrigin(request.headers)));
     }
   }
 

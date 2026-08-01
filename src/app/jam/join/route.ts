@@ -3,6 +3,7 @@ import { supabaseServer, supabaseAdmin } from "@/lib/supabase/server";
 import { joinJam, readInvite } from "@/lib/jam";
 import { identityFromUser } from "@/lib/auth";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
+import { requestOrigin } from "@/lib/origin";
 
 /**
  * Redeems an invite link.
@@ -14,8 +15,10 @@ import { clientKey, rateLimit } from "@/lib/rate-limit";
  * baked into a signed JWT rather than a header a proxy promised to strip.
  */
 export async function GET(request: NextRequest) {
+  const origin = requestOrigin(request.headers);
+
   if (!rateLimit(`jam-join:${clientKey(request)}`, 10, 60_000)) {
-    return NextResponse.redirect(new URL("/jam?error=rate_limited", request.nextUrl.origin));
+    return NextResponse.redirect(new URL("/jam?error=rate_limited", origin));
   }
 
   const token = request.nextUrl.searchParams.get("token");
@@ -24,7 +27,7 @@ export async function GET(request: NextRequest) {
 
   const claims = readInvite(token);
   if (!claims) {
-    return NextResponse.redirect(new URL("/jam?error=invalid_invite", request.nextUrl.origin));
+    return NextResponse.redirect(new URL("/jam?error=invalid_invite", origin));
   }
 
   const supabase = await supabaseServer();
@@ -36,7 +39,7 @@ export async function GET(request: NextRequest) {
   // The owner testing their own invite link must not have guest claims written
   // onto their GitHub account. Send them to the panel they actually wanted.
   if (identityFromUser(current.user).role === "host") {
-    return NextResponse.redirect(new URL("/settings", request.nextUrl.origin));
+    return NextResponse.redirect(new URL("/settings", origin));
   }
 
   let userId = current.user?.id ?? null;
@@ -44,17 +47,17 @@ export async function GET(request: NextRequest) {
   if (!userId) {
     const { data, error } = await supabase.auth.signInAnonymously();
     if (error || !data.user) {
-      return NextResponse.redirect(new URL("/jam?error=signin_failed", request.nextUrl.origin));
+      return NextResponse.redirect(new URL("/jam?error=signin_failed", origin));
     }
     userId = data.user.id;
   }
 
   const participant = await joinJam(claims, userId, name);
   if (!participant) {
-    return NextResponse.redirect(new URL("/jam?error=jam_closed", request.nextUrl.origin));
+    return NextResponse.redirect(new URL("/jam?error=jam_closed", origin));
   }
   if (participant.status === "kicked") {
-    return NextResponse.redirect(new URL("/jam?error=removed", request.nextUrl.origin));
+    return NextResponse.redirect(new URL("/jam?error=removed", origin));
   }
 
   const admin = supabaseAdmin();
@@ -66,5 +69,5 @@ export async function GET(request: NextRequest) {
   // guest's very next request would look like an ordinary anonymous user.
   await supabase.auth.refreshSession();
 
-  return NextResponse.redirect(new URL("/jam", request.nextUrl.origin));
+  return NextResponse.redirect(new URL("/jam", origin));
 }

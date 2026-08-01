@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { requireHost } from "@/lib/auth-server";
 import { signToken } from "@/lib/tokens";
+import { requestOrigin } from "@/lib/origin";
 import { getActiveJam, listParticipants, signInvite } from "@/lib/jam";
 import { CopyField } from "@/components/CopyField";
 import { JamPanel } from "@/components/JamPanel";
@@ -10,10 +11,7 @@ export const metadata = { title: "Settings" };
 export default async function SettingsPage() {
   await requireHost();
 
-  const headerList = await headers();
-  const host = headerList.get("host") ?? "localhost:3000";
-  const protocol = headerList.get("x-forwarded-proto") ?? "http";
-  const origin = `${protocol}://${host}`;
+  const origin = requestOrigin(await headers());
 
   // A year: an OBS scene is set up once and left alone. Rotating APP_SECRET
   // invalidates every outstanding overlay link at once.

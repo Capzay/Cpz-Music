@@ -1,19 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
+import { requestOrigin } from "@/lib/origin";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
   const next = searchParams.get("next");
 
-  // Behind the tunnel, nextUrl.origin is the address the server bound to
-  // (0.0.0.0:3000), not the address the browser used. Redirecting there sends
-  // the user somewhere their cookies do not exist.
-  const forwardedHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  const forwardedProto = request.headers.get("x-forwarded-proto");
-  const origin = forwardedHost
-    ? `${forwardedProto ?? request.nextUrl.protocol.replace(":", "")}://${forwardedHost}`
-    : request.nextUrl.origin;
+  const origin = requestOrigin(request.headers);
 
   // Only same-origin relative paths, so ?next= cannot be used as an open redirect.
   const destination = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";

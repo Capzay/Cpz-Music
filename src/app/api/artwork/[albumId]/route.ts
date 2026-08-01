@@ -18,7 +18,8 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/artwork/
 
   return fileResponse(album.artworkPath, artworkDir(), contentType, request.headers.get("range"), {
     // Short: the URL is keyed by album id, so a rescan replaces the image
-    // behind it. A week of browser cache outlived several rescans.
-    "Cache-Control": "private, max-age=86400",
+    // behind it. A week of browser cache outlived several rescans. Public
+    // because the route is: Discord's proxy caches it on the way to the card.
+    "Cache-Control": "public, max-age=86400",
   });
 }

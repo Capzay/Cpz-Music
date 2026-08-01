@@ -20,6 +20,13 @@ const PUBLIC_PATHS = [
   "/jam",
   "/obs",
   "/api/now-playing",
+  // Cover art, and only cover art. Two things fetch it with no cookies to send
+  // and no way to acquire any: Discord's media proxy, which is what puts the
+  // album on a Rich Presence card, and the OBS browser source, which has its own
+  // cookie jar. Both got a 401 and showed nothing. Audio stays behind the check;
+  // this exposes album covers to anyone who guesses an id, which is the trade the
+  // old build made too.
+  "/api/artwork",
 ];
 
 function isPublic(pathname: string) {

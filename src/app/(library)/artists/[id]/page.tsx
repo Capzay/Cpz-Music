@@ -34,7 +34,12 @@ export default async function ArtistPage(props: PageProps<"/artists/[id]">) {
     }),
     prisma.track.findMany({
       where: { artistId: artist.id },
-      orderBy: [{ album: { year: "asc" } }, { discNumber: "asc" }, { trackNumber: "asc" }],
+      orderBy: [
+        { album: { year: "asc" } },
+        { album: { title: "asc" } },
+        { discNumber: "asc" },
+        { trackNumber: "asc" },
+      ],
       select: trackSelect,
     }),
     prisma.playlist.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),

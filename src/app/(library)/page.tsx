@@ -7,7 +7,13 @@ export const metadata = { title: "Library" };
 export default async function LibraryPage() {
   const [tracks, playlists] = await Promise.all([
     prisma.track.findMany({
-      orderBy: [{ artist: { name: "asc" } }, { album: { year: "asc" } }, { discNumber: "asc" }, { trackNumber: "asc" }],
+      orderBy: [
+        { artist: { name: "asc" } },
+        { album: { year: "asc" } },
+        { album: { title: "asc" } },
+        { discNumber: "asc" },
+        { trackNumber: "asc" },
+      ],
       select: trackSelect,
     }),
     prisma.playlist.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),

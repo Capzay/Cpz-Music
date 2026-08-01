@@ -18,6 +18,9 @@ import {
 /** How often the active device republishes its position while playing. */
 const STATE_INTERVAL_MS = 1000;
 
+/** How often it corrects the overlay's position. Rarer: that one is an HTTP post. */
+const OVERLAY_INTERVAL_MS = 15_000;
+
 /** One channel per tab, like the audio element. The device picker reaches it here. */
 let playerChannel: RealtimeChannel | null = null;
 
@@ -146,13 +149,18 @@ export function useSync() {
     };
 
     // The OBS overlay cannot join the channel, so mirror the essentials to the
-    // server for it to poll. Only on track or transport changes, not per second.
+    // server for it to poll. Only on track or transport changes, not per second:
+    // the endpoint runs the position forward on its own between posts.
     const publishOverlay = () => {
       const s = usePlayerStore.getState();
       void fetch("/api/now-playing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ track: s.queue[s.index] ?? null, isPlaying: s.isPlaying }),
+        body: JSON.stringify({
+          track: s.queue[s.index] ?? null,
+          isPlaying: s.isPlaying,
+          currentTime: s.currentTime,
+        }),
       }).catch(() => {});
     };
 
@@ -160,7 +168,15 @@ export function useSync() {
     publishOverlay();
     if (!isPlaying) return;
     const timer = setInterval(publish, STATE_INTERVAL_MS);
-    return () => clearInterval(timer);
+    // A seek moves the position without changing the track or transport state,
+    // so nothing above would re-post it and the overlay's bar would sit wrong
+    // for the rest of the track. Slow enough not to be the per-second posting
+    // the comment above rules out.
+    const overlayTimer = setInterval(publishOverlay, OVERLAY_INTERVAL_MS);
+    return () => {
+      clearInterval(timer);
+      clearInterval(overlayTimer);
+    };
   }, [isActiveDevice, isPlaying, index, queueLength]);
 }
 

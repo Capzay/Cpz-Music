@@ -16,9 +16,15 @@ import type { PlayerTrack } from "@/lib/types";
  * survive multiple instances. The overlay repopulates on the next state change
  * a second later. Move to Postgres only if this ever runs more than one process.
  */
-let nowPlaying: { track: PlayerTrack | null; isPlaying: boolean; updatedAt: number } = {
+let nowPlaying: {
+  track: PlayerTrack | null;
+  isPlaying: boolean;
+  currentTime: number;
+  updatedAt: number;
+} = {
   track: null,
   isPlaying: false,
+  currentTime: 0,
   updatedAt: 0,
 };
 
@@ -33,8 +39,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 
-  const { track, isPlaying } = body as { track: PlayerTrack | null; isPlaying: boolean };
-  nowPlaying = { track: track ?? null, isPlaying: Boolean(isPlaying), updatedAt: Date.now() };
+  const { track, isPlaying, currentTime } = body as {
+    track: PlayerTrack | null;
+    isPlaying: boolean;
+    currentTime?: number;
+  };
+  nowPlaying = {
+    track: track ?? null,
+    isPlaying: Boolean(isPlaying),
+    currentTime: Number.isFinite(currentTime) ? Number(currentTime) : 0,
+    updatedAt: Date.now(),
+  };
   return new NextResponse(null, { status: 204 });
 }
 
@@ -47,7 +62,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  return NextResponse.json(nowPlaying, {
-    headers: { "Cache-Control": "no-store" },
-  });
+  // The device posts only when something changes, so run the clock forward here
+  // rather than making it post a position every second. The overlay then only
+  // has to smooth between polls, and never has to trust its own clock against
+  // the server's.
+  const elapsed = nowPlaying.isPlaying ? (Date.now() - nowPlaying.updatedAt) / 1000 : 0;
+  const duration = nowPlaying.track?.duration ?? 0;
+  const currentTime = Math.min(nowPlaying.currentTime + elapsed, duration || Infinity);
+
+  return NextResponse.json(
+    { track: nowPlaying.track, isPlaying: nowPlaying.isPlaying, currentTime },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

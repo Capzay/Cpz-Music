@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import path from "node:path";
 import { DiscordPresence, type Presence } from "./discord";
+import { isInternalUrl } from "./navigation";
 
 // Point at your own deployment. No secret lives here; the site handles sign-in.
 const SERVER_URL = process.env.CPZ_SERVER_URL ?? "https://music.capzay.uk";
@@ -32,19 +33,18 @@ function createWindow() {
 
   mainWindow.on("ready-to-show", () => mainWindow?.show());
 
-  // Anything not on our own origin opens in the real browser, so a stray link
-  // cannot navigate the app window somewhere hostile.
+  // Anything but our own origin and the sign-in hosts opens in the real browser,
+  // so a stray link cannot navigate the app window somewhere hostile.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith(SERVER_URL)) return { action: "allow" };
+    if (isInternalUrl(url, SERVER_URL)) return { action: "allow" };
     void shell.openExternal(url);
     return { action: "deny" };
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(SERVER_URL)) {
-      event.preventDefault();
-      void shell.openExternal(url);
-    }
+    if (isInternalUrl(url, SERVER_URL)) return;
+    event.preventDefault();
+    void shell.openExternal(url);
   });
 
   void mainWindow.loadURL(SERVER_URL);

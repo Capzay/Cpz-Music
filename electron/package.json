@@ -10,7 +10,7 @@
     "dist": "npm run compile && electron-builder",
     "dist:linux": "npm run compile && electron-builder --linux",
     "dist:win": "npm run compile && electron-builder --win",
-    "test": "npm run compile && node --test discord.test.mjs"
+    "test": "npm run compile && node --test discord.test.mjs navigation.test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

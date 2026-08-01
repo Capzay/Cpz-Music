@@ -36,8 +36,11 @@ export function useAudio() {
 
   // Restore the saved volume once, on the client, so SSR and hydration agree.
   useEffect(() => {
-    const saved = Number(localStorage.getItem("cpz-volume"));
-    if (Number.isFinite(saved) && saved >= 0 && saved <= 1) {
+    // getItem returns null with nothing stored, and Number(null) is 0, which
+    // would pass the range check below and mute every fresh session.
+    const stored = localStorage.getItem("cpz-volume");
+    const saved = Number(stored);
+    if (stored && Number.isFinite(saved) && saved >= 0 && saved <= 1) {
       usePlayerStore.setState({ volume: saved });
     }
     startListenQueue();

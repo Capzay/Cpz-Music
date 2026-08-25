@@ -38,7 +38,8 @@ function getClient(): PrismaClient {
     );
   }
   globalForPrisma.prisma = new PrismaClient({
-    adapter: new PrismaPg({ connectionString, lookup: ipv4Lookup }),
+    // Prisma's PoolConfig typings omit `lookup`; node-pg still honours it.
+    adapter: new PrismaPg({ connectionString, lookup: ipv4Lookup } as { connectionString: string }),
   });
   return globalForPrisma.prisma;
 }

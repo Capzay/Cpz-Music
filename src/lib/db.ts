@@ -1,5 +1,11 @@
+import dns from "node:dns";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
+
+// Dual-stack hosts (including the Supabase pooler) often return IPv6 first.
+// `pg` does not fall back, so a machine with no IPv6 route fails with
+// ENETUNREACH instead of using the A record.
+dns.setDefaultResultOrder("ipv4first");
 
 // Cached on globalThis so Next.js dev hot-reloads reuse one pool instead of
 // opening a new one per reload.

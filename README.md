@@ -48,7 +48,7 @@ calling out:
 
 | Variable | Notes |
 | --- | --- |
-| `DATABASE_URL` | The **direct** connection string on port 5432. This app is one long-lived process, so connection pooling buys nothing. |
+| `DATABASE_URL` | The **session pooler** string (port 5432, host `*.pooler.supabase.com`). Direct `db.*.supabase.co` is IPv6-only; the pooler still answers on IPv4, which a home network usually needs. Do not use transaction mode (port 6543). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Bypasses row level security. Server-side only, and never given a `NEXT_PUBLIC_` prefix. |
 | `OWNER_GITHUB_ID` | Your numeric GitHub id, from `https://api.github.com/users/<username>`. Only this account can reach the library, and leaving it unset locks everyone out rather than letting everyone in. |
 | `APP_SECRET` | Signs jam invites and overlay links. `openssl rand -hex 32`. Changing it revokes every outstanding link. |
@@ -72,7 +72,10 @@ npm start
 ```
 
 The first launch scans `MUSIC_DIR`. Large libraries take a few minutes; the app
-is usable while it works.
+is usable while it works. If this runs under systemd, wait for DNS before
+starting the process (`After=network-online.target` and
+`Wants=network-online.target`); otherwise the first scan can fail with
+`EAI_AGAIN` at boot.
 
 > **Build with your real environment.** `NEXT_PUBLIC_*` values are compiled into
 > the bundle and into the Content Security Policy, so `npm run build` must run

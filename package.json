@@ -17,29 +17,29 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
-    "@supabase/ssr": "^0.12.4",
+    "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.111.0",
     "chokidar": "^5.0.0",
-    "lucide-react": "^1.28.0",
-    "music-metadata": "^11.14.0",
-    "next": "16.2.12",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "lucide-react": "^1.34.0",
+    "music-metadata": "^11.15.0",
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "server-only": "^0.0.1",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.12",
+    "eslint": "^10",
+    "eslint-config-next": "16.3.2",
     "prisma": "^7.9.1",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "vitest": "^4.1.10"
+    "typescript": "^7",
+    "vitest": "^4.1.11"
   },
   "description": "Self-hosted personal music streamer",
   "overrides": {

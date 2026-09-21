@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,6 +14,9 @@ import {
   Radio,
   Search,
 } from "lucide-react";
+import { usePlaylists } from "@/store/playlists";
+import { visiblePlaylists } from "@/lib/playlist-sync";
+import { PlaylistLink } from "@/components/PlaylistLink";
 
 const LINKS = [
   { href: "/", icon: LibraryIcon, label: "Library" },
@@ -33,8 +37,12 @@ const linkClass = (active: boolean) =>
     active ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
   }`;
 
-export function Sidebar({ playlists }: { playlists: { id: number; name: string }[] }) {
+export function Sidebar() {
   const pathname = usePathname();
+  const playlists = usePlaylists((s) => visiblePlaylists(s.playlists));
+  const hydrate = usePlaylists((s) => s.hydrate);
+
+  useEffect(() => hydrate(), [hydrate]);
 
   return (
     <nav className="hidden md:flex flex-col w-60 flex-shrink-0 h-full bg-zinc-950 border-r border-zinc-800 py-4 overflow-y-auto">
@@ -72,14 +80,14 @@ export function Sidebar({ playlists }: { playlists: { id: number; name: string }
           </p>
           <div className="flex flex-col gap-0.5">
             {playlists.map((playlist) => (
-              <Link
-                key={playlist.id}
-                href={`/playlists/${playlist.id}`}
-                className={linkClass(pathname === `/playlists/${playlist.id}`)}
+              <PlaylistLink
+                key={playlist.uuid}
+                uuid={playlist.uuid}
+                className={linkClass(pathname === `/playlists/${playlist.uuid}`)}
               >
                 <ListMusic size={16} />
                 <span className="truncate">{playlist.name}</span>
-              </Link>
+              </PlaylistLink>
             ))}
           </div>
         </div>

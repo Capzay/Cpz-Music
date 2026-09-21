@@ -67,9 +67,13 @@ model DailyListenStat {
 
 model Playlist {
   id        Int             @id @default(autoincrement())
+  /// Stable across devices. Clients create playlists offline with their own
+  /// uuid, then sync; integer `id` stays the PK used by PlaylistTrack.
+  uuid      String          @unique @default(uuid())
   name      String
   createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  /// Client-authored. Last write wins on sync; not auto-touched by Prisma.
+  updatedAt DateTime        @default(now())
   tracks    PlaylistTrack[]
 }
 

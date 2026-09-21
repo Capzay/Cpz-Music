@@ -12,23 +12,20 @@ export default async function AlbumPage(props: PageProps<"/albums/[id]">) {
   const albumId = Number(id);
   if (!Number.isInteger(albumId)) notFound();
 
-  const [album, playlists] = await Promise.all([
-    prisma.album.findUnique({
-      where: { id: albumId },
-      select: {
-        id: true,
-        title: true,
-        year: true,
-        artworkPath: true,
-        artist: { select: { id: true, name: true } },
-        tracks: {
-          orderBy: [{ discNumber: "asc" }, { trackNumber: "asc" }, { title: "asc" }],
-          select: trackSelect,
-        },
+  const album = await prisma.album.findUnique({
+    where: { id: albumId },
+    select: {
+      id: true,
+      title: true,
+      year: true,
+      artworkPath: true,
+      artist: { select: { id: true, name: true } },
+      tracks: {
+        orderBy: [{ discNumber: "asc" }, { trackNumber: "asc" }, { title: "asc" }],
+        select: trackSelect,
       },
-    }),
-    prisma.playlist.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-  ]);
+    },
+  });
   if (!album) notFound();
 
   const tracks = album.tracks.map(toPlayerTrack);
@@ -67,7 +64,7 @@ export default async function AlbumPage(props: PageProps<"/albums/[id]">) {
         </div>
       </div>
 
-      <TrackList tracks={tracks} playlists={playlists} showAlbum={false} />
+      <TrackList tracks={tracks} showAlbum={false} />
     </>
   );
 }

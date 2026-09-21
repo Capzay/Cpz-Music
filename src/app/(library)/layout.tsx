@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { getIdentity } from "@/lib/auth-server";
-import { prisma } from "@/lib/db";
 import { MobileNav, Sidebar } from "@/components/Nav";
 import { PlayerBar } from "@/components/Player/PlayerBar";
 import { ServiceWorker } from "@/components/ServiceWorker";
@@ -11,16 +10,11 @@ export default async function LibraryLayout({ children }: { children: React.Reac
   const identity = await getIdentity();
   if (identity.role !== "host") redirect("/login");
 
-  const playlists = await prisma.playlist.findMany({
-    orderBy: { updatedAt: "desc" },
-    select: { id: true, name: true },
-  });
-
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <ServiceWorker />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar playlists={playlists} />
+        <Sidebar />
         {/* The bottom pad has to clear the player, the nav, and the home indicator. */}
         <main className="flex-1 overflow-y-auto px-3 py-4 pb-[calc(9rem+env(safe-area-inset-bottom))] md:px-6 md:py-6 md:pb-24">
           {children}

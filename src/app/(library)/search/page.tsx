@@ -35,7 +35,7 @@ export default async function SearchPage(props: PageProps<"/search">) {
 async function Results({ query }: { query: string }) {
   const contains = { contains: query, mode: "insensitive" as const };
 
-  const [tracks, albums, artists, playlists] = await Promise.all([
+  const [tracks, albums, artists] = await Promise.all([
     prisma.track.findMany({
       where: { title: contains },
       take: 25,
@@ -60,7 +60,6 @@ async function Results({ query }: { query: string }) {
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
-    prisma.playlist.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   if (tracks.length === 0 && albums.length === 0 && artists.length === 0) {
@@ -72,7 +71,7 @@ async function Results({ query }: { query: string }) {
       {tracks.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-3">Tracks</h2>
-          <TrackList tracks={tracks.map(toPlayerTrack)} playlists={playlists} numbered={false} />
+          <TrackList tracks={tracks.map(toPlayerTrack)} numbered={false} />
         </div>
       )}
 

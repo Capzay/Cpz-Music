@@ -93,6 +93,7 @@ describe("isGuestAllowed", () => {
     expect(isGuestAllowed("POST", "/api/jam/leave")).toBe(true);
     expect(isGuestAllowed("POST", "/api/jam/admit")).toBe(false);
     expect(isGuestAllowed("POST", "/api/playlists")).toBe(false);
+    expect(isGuestAllowed("POST", "/api/playlists/sync")).toBe(false);
     expect(isGuestAllowed("POST", "/api/stats/listen")).toBe(false);
   });
 
@@ -106,6 +107,7 @@ describe("isGuestAllowed", () => {
   it("denies anything not named, so a new endpoint is host-only by default", () => {
     expect(isGuestAllowed("GET", "/api/stats")).toBe(false);
     expect(isGuestAllowed("GET", "/api/playlists")).toBe(false);
+    expect(isGuestAllowed("GET", "/api/playlists/sync")).toBe(false);
     expect(isGuestAllowed("GET", "/api/some-future-endpoint")).toBe(false);
   });
 });

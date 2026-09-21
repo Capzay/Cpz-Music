@@ -1,25 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import { deletePlaylist, renamePlaylist } from "@/app/(library)/playlists/actions";
+import { usePlaylists } from "@/store/playlists";
 
 export function PlaylistHeader({
-  id,
+  uuid,
   name,
   count,
+  onDeleted,
 }: {
-  id: number;
+  uuid: string;
   name: string;
   count: number;
+  onDeleted: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const rename = usePlaylists((s) => s.rename);
+  const remove = usePlaylists((s) => s.remove);
 
   return (
     <header className="mb-5">
       {editing ? (
         <form
-          action={async (formData) => {
-            await renamePlaylist(id, formData);
+          onSubmit={(event) => {
+            event.preventDefault();
+            const next = String(new FormData(event.currentTarget).get("name") ?? "");
+            rename(uuid, next);
             setEditing(false);
           }}
           className="flex max-w-md gap-2"
@@ -52,17 +58,17 @@ export function PlaylistHeader({
           >
             Rename
           </button>
-          <form action={deletePlaylist.bind(null, id)}>
-            <button
-              className="text-xs text-zinc-600 hover:text-red-400"
-              onClick={(e) => {
-                // A playlist is not recoverable, and the button sits next to Rename.
-                if (!confirm(`Delete "${name}"?`)) e.preventDefault();
-              }}
-            >
-              Delete
-            </button>
-          </form>
+          <button
+            className="text-xs text-zinc-600 hover:text-red-400"
+            onClick={() => {
+              // A playlist is not recoverable, and the button sits next to Rename.
+              if (!confirm(`Delete "${name}"?`)) return;
+              remove(uuid);
+              onDeleted();
+            }}
+          >
+            Delete
+          </button>
         </div>
       )}
       <p className="mt-1 text-sm text-zinc-500">{count} tracks</p>

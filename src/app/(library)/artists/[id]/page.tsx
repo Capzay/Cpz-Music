@@ -18,7 +18,7 @@ export default async function ArtistPage(props: PageProps<"/artists/[id]">) {
 
   // Albums they are credited on as album artist, plus albums holding a track of
   // theirs, so features on other people's records still show up here.
-  const [albums, tracks, playlists] = await Promise.all([
+  const [albums, tracks] = await Promise.all([
     prisma.album.findMany({
       where: {
         OR: [{ artistId: artist.id }, { tracks: { some: { artistId: artist.id } } }],
@@ -42,7 +42,6 @@ export default async function ArtistPage(props: PageProps<"/artists/[id]">) {
       ],
       select: trackSelect,
     }),
-    prisma.playlist.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   const playerTracks = tracks.map(toPlayerTrack);
@@ -82,7 +81,7 @@ export default async function ArtistPage(props: PageProps<"/artists/[id]">) {
 
       <div>
         <h2 className="text-lg font-semibold mb-3">All Tracks</h2>
-        <TrackList tracks={playerTracks} playlists={playlists} numbered={false} />
+        <TrackList tracks={playerTracks} numbered={false} />
       </div>
     </>
   );

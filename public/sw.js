@@ -11,6 +11,8 @@
  *                     old cover until someone cleared the cache by hand.
  *
  * Nothing authenticated or live is cached: no stats, no jam, no now-playing.
+ * Offline playlist detail URLs fall back to the cached /playlists document
+ * with the id in the hash; the page reads the local store.
  */
 
 const STATIC_CACHE = "cpz-static-v1";
@@ -22,6 +24,7 @@ const KNOWN = [STATIC_CACHE, PAGE_CACHE, AUDIO_CACHE, ARTWORK_CACHE];
 
 const STREAM_RE = /^\/api\/tracks\/\d+\/stream$/;
 const ARTWORK_RE = /^\/api\/artwork\/\d+$/;
+const PLAYLIST_DETAIL_RE = /^\/playlists\/([^/]+)\/?$/;
 
 self.addEventListener("install", () => self.skipWaiting());
 
@@ -88,6 +91,17 @@ async function handleNavigation(request) {
   } catch {
     const cached = await caches.match(url.pathname, { cacheName: PAGE_CACHE });
     if (cached) return cached;
+
+    // Playlist detail is a client page that reads the local store. A URL that
+    // was never opened while online has no cached RSC, so bounce to the list
+    // document with the id in the hash.
+    const playlistMatch = PLAYLIST_DETAIL_RE.exec(url.pathname);
+    if (playlistMatch) {
+      const list = await caches.match("/playlists", { cacheName: PAGE_CACHE });
+      if (list) {
+        return Response.redirect(`${url.origin}/playlists#${encodeURIComponent(playlistMatch[1])}`);
+      }
+    }
 
     const downloads = await caches.match("/downloads", { cacheName: PAGE_CACHE });
     if (downloads) return downloads;

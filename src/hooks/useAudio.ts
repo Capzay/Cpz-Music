@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePlayerStore } from "@/store/player";
+import { useDownloads } from "@/store/downloads";
 import { streamUrl } from "@/lib/types";
 import {
   setMediaSessionHandlers,
@@ -46,6 +47,7 @@ export function useAudio() {
     }
     startListenQueue();
     startPlaylistSync();
+    useDownloads.getState().hydrate();
   }, []);
 
   // Load whenever the track changes. A remote mirrors state on screen but must
@@ -151,13 +153,21 @@ export function useAudio() {
 
     // Offline, a track that was never downloaded fails to load. Skip past it so a
     // partly-downloaded queue keeps playing, but give up after a full lap so an
-    // entirely undownloaded queue does not spin.
+    // entirely undownloaded queue does not spin. A downloaded track that still
+    // errors is a real failure (missing cache / SW) — stop rather than racing.
     const onError = () => {
       if (!audio.src) return;
-      consecutiveErrors.current += 1;
       const s = usePlayerStore.getState();
+      const failed = s.queue[s.index];
+      const downloaded = failed != null && !!useDownloads.getState().registry[failed.id];
+      if (navigator.onLine || downloaded) {
+        consecutiveErrors.current = 0;
+        usePlayerStore.setState({ isPlaying: false });
+        return;
+      }
+      consecutiveErrors.current += 1;
       const limit = Math.min(s.queue.length || 1, 30);
-      if (navigator.onLine || consecutiveErrors.current >= limit) {
+      if (consecutiveErrors.current >= limit) {
         consecutiveErrors.current = 0;
         usePlayerStore.setState({ isPlaying: false });
         return;

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { usePlaylists } from "@/store/playlists";
 import { PlayAlbumButton } from "@/components/PlayAlbumButton";
 import { DownloadButton } from "@/components/DownloadButton";
+import { AddToPlaylistButton } from "@/components/AddToPlaylistPicker";
 import { PlaylistTracks } from "@/components/PlaylistTracks";
 import { PlaylistHeader } from "@/components/PlaylistHeader";
 import { PlaylistLink, goOfflineAware, playlistHref } from "@/components/PlaylistLink";
@@ -149,14 +150,23 @@ function PlaylistDetail({ selected, onClose }: { selected: string; onClose: () =
         onDeleted={onClose}
       />
 
-      {playlist.tracks.length > 0 ? (
-        <div className="mb-5 flex flex-wrap gap-2">
-          <PlayAlbumButton tracks={playlist.tracks} />
-          <DownloadButton tracks={playlist.tracks} />
-        </div>
-      ) : (
-        <p className="text-sm text-zinc-500">Empty. Add tracks from an album or from search.</p>
-      )}
+      <div className="mb-5 flex flex-wrap gap-2">
+        {playlist.tracks.length > 0 ? (
+          <>
+            <PlayAlbumButton tracks={playlist.tracks} />
+            <DownloadButton tracks={playlist.tracks} />
+          </>
+        ) : null}
+        <AddToPlaylistButton
+          uuid={playlist.uuid}
+          existingIds={new Set(playlist.tracks.map((t) => t.id))}
+          trackCount={playlist.tracks.length}
+        />
+      </div>
+
+      {playlist.tracks.length === 0 ? (
+        <p className="mb-4 text-sm text-zinc-500">Empty. Use Add songs to search the library.</p>
+      ) : null}
 
       <PlaylistTracks uuid={playlist.uuid} tracks={playlist.tracks} />
     </>

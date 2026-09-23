@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { ListEnd, ListStart, Music, Play, Plus } from "lucide-react";
 import { usePlayerStore } from "@/store/player";
 import { usePlaylists } from "@/store/playlists";
+import { useDownloads } from "@/store/downloads";
+import { queueForPlayback } from "@/lib/offline-play";
 import { formatDuration } from "@/lib/format";
 import { artworkUrl, type PlayerTrack } from "@/lib/types";
 import { visiblePlaylists } from "@/lib/playlist-sync";
@@ -39,11 +41,20 @@ export function TrackList({
   const playlists = visiblePlaylists(usePlaylists((s) => s.playlists));
   const addTracks = usePlaylists((s) => s.addTracks);
   const hydrate = usePlaylists((s) => s.hydrate);
+  const hydrateDownloads = useDownloads((s) => s.hydrate);
 
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [target, setTarget] = useState<PlayerTrack | null>(null);
 
-  useEffect(() => hydrate(), [hydrate]);
+  useEffect(() => {
+    hydrate();
+    hydrateDownloads();
+  }, [hydrate, hydrateDownloads]);
+
+  function playFrom(i: number) {
+    const next = queueForPlayback(tracks, i);
+    dispatch({ type: "setQueue", tracks: next.tracks, startIndex: next.startIndex });
+  }
 
   function openPlaylistPicker(track: PlayerTrack) {
     setTarget(track);
@@ -51,7 +62,7 @@ export function TrackList({
   }
 
   const rowActions = (track: PlayerTrack) => (
-    <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+    <div className="flex items-center gap-1 pointer-events-none opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100">
       <button
         onClick={() => dispatch({ type: "playNext", track })}
         title="Play next"
@@ -104,7 +115,7 @@ export function TrackList({
                 className={`group cursor-pointer hover:bg-zinc-800/50 ${
                   isCurrent ? "text-violet-400" : ""
                 }`}
-                onClick={() => dispatch({ type: "setQueue", tracks, startIndex: i })}
+                onClick={() => playFrom(i)}
               >
                 {numbered && (
                   <td className="py-2 pl-4 pr-2 w-10 text-zinc-400 text-sm">
@@ -150,7 +161,7 @@ export function TrackList({
           <div
             key={track.id}
             className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-800/50 cursor-pointer"
-            onClick={() => dispatch({ type: "setQueue", tracks, startIndex: i })}
+            onClick={() => playFrom(i)}
           >
             <Thumb track={track} />
             <div className="flex-1 min-w-0">

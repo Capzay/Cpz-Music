@@ -55,6 +55,7 @@ export function AddToPlaylistButton({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [offline, setOffline] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const room = Math.max(0, MAX_TRACKS - trackCount);
 
@@ -68,6 +69,14 @@ export function AddToPlaylistButton({
       window.removeEventListener("offline", sync);
     };
   }, []);
+
+  // Mount the dialog only while open, then promote it to the modal layer.
+  useEffect(() => {
+    if (!isOpen) return;
+    const el = dialogRef.current;
+    if (!el) return;
+    if (!el.open) el.showModal();
+  }, [isOpen]);
 
   const runSearch = useEffectEvent(async (term: string) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -100,14 +109,14 @@ export function AddToPlaylistButton({
   const term = query.trim();
 
   useEffect(() => {
-    if (!term) return;
+    if (!isOpen || !term) return;
     const handle = window.setTimeout(() => {
       startTransition(() => {
         void runSearch(term);
       });
     }, 250);
     return () => window.clearTimeout(handle);
-  }, [term]);
+  }, [term, isOpen]);
 
   const shown = term ? results : emptyResults();
 
@@ -118,11 +127,11 @@ export function AddToPlaylistButton({
     setExpandedAlbums({});
     setExpandedArtists({});
     setError(null);
-    dialogRef.current?.showModal();
+    setIsOpen(true);
   }
 
   function close() {
-    dialogRef.current?.close();
+    setIsOpen(false);
   }
 
   function toggleTrack(track: PlayerTrack) {
@@ -244,11 +253,12 @@ export function AddToPlaylistButton({
         Add songs
       </button>
 
-      <dialog
-        ref={dialogRef}
-        onClose={close}
-        className="m-auto h-[min(40rem,90vh)] w-full max-w-lg flex-col rounded-lg border border-zinc-700 bg-zinc-900 p-0 text-white open:flex backdrop:bg-black/60"
-      >
+      {isOpen ? (
+        <dialog
+          ref={dialogRef}
+          onClose={close}
+          className="m-auto flex h-[min(40rem,90vh)] w-full max-w-lg flex-col rounded-lg border border-zinc-700 bg-zinc-900 p-0 text-white backdrop:bg-black/60"
+        >
         <div className="border-b border-zinc-800 px-4 py-3">
           <p className="text-sm font-medium">Add songs</p>
           <p className="text-xs text-zinc-500">Search tracks, albums, or artists</p>
@@ -489,6 +499,7 @@ export function AddToPlaylistButton({
           </div>
         </div>
       </dialog>
+      ) : null}
     </>
   );
 }

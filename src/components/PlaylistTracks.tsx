@@ -1,30 +1,28 @@
 "use client";
 
-import { useTransition } from "react";
 import { ChevronDown, ChevronUp, Play, X } from "lucide-react";
 import { usePlayerStore } from "@/store/player";
+import { usePlaylists } from "@/store/playlists";
 import { formatDuration } from "@/lib/format";
 import { artworkUrl, type PlayerTrack } from "@/lib/types";
-import { movePlaylistTrack, removeFromPlaylist } from "@/app/(library)/playlists/actions";
 
 export function PlaylistTracks({
-  playlistId,
-  entries,
+  uuid,
+  tracks,
 }: {
-  playlistId: number;
-  entries: { playlistTrackId: number; track: PlayerTrack }[];
+  uuid: string;
+  tracks: PlayerTrack[];
 }) {
   const dispatch = usePlayerStore((s) => s.dispatch);
   const currentId = usePlayerStore((s) => s.queue[s.index]?.id ?? null);
-  const [pending, startTransition] = useTransition();
-
-  const tracks = entries.map((e) => e.track);
+  const removeTrack = usePlaylists((s) => s.removeTrack);
+  const moveTrack = usePlaylists((s) => s.moveTrack);
 
   return (
-    <div className={`flex flex-col ${pending ? "opacity-60" : ""}`}>
-      {entries.map(({ playlistTrackId, track }, i) => (
+    <div className="flex flex-col">
+      {tracks.map((track, i) => (
         <div
-          key={playlistTrackId}
+          key={`${track.id}-${i}`}
           className="group flex items-center gap-3 px-2 py-2 hover:bg-zinc-800/50 cursor-pointer"
           onClick={() => dispatch({ type: "setQueue", tracks, startIndex: i })}
         >
@@ -56,32 +54,23 @@ export function PlaylistTracks({
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              disabled={i === 0 || pending}
-              onClick={() =>
-                startTransition(() => movePlaylistTrack(playlistId, i, i - 1).catch(() => {}))
-              }
+              disabled={i === 0}
+              onClick={() => moveTrack(uuid, i, i - 1)}
               aria-label="Move up"
               className="px-1 text-zinc-500 hover:text-white disabled:opacity-20"
             >
               <ChevronUp size={16} />
             </button>
             <button
-              disabled={i === entries.length - 1 || pending}
-              onClick={() =>
-                startTransition(() => movePlaylistTrack(playlistId, i, i + 1).catch(() => {}))
-              }
+              disabled={i === tracks.length - 1}
+              onClick={() => moveTrack(uuid, i, i + 1)}
               aria-label="Move down"
               className="px-1 text-zinc-500 hover:text-white disabled:opacity-20"
             >
               <ChevronDown size={16} />
             </button>
             <button
-              disabled={pending}
-              onClick={() =>
-                startTransition(() =>
-                  removeFromPlaylist(playlistId, playlistTrackId).catch(() => {}),
-                )
-              }
+              onClick={() => removeTrack(uuid, i)}
               aria-label={`Remove ${track.title}`}
               className="px-1 text-zinc-500 hover:text-red-400 disabled:opacity-20"
             >

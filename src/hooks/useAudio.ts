@@ -9,6 +9,7 @@ import {
   updateMediaSession,
 } from "@/lib/media-session";
 import { reportListen, startListenQueue } from "@/lib/listen-queue";
+import { startPlaylistSync } from "@/store/playlists";
 
 /** One element for the whole app; a second one would play over the first. */
 let element: HTMLAudioElement | null = null;
@@ -44,6 +45,7 @@ export function useAudio() {
       usePlayerStore.setState({ volume: saved });
     }
     startListenQueue();
+    startPlaylistSync();
   }, []);
 
   // Load whenever the track changes. A remote mirrors state on screen but must

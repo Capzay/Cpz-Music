@@ -5,19 +5,16 @@ import { TrackList } from "@/components/TrackList";
 export const metadata = { title: "Library" };
 
 export default async function LibraryPage() {
-  const [tracks, playlists] = await Promise.all([
-    prisma.track.findMany({
-      orderBy: [
-        { artist: { name: "asc" } },
-        { album: { year: "asc" } },
-        { album: { title: "asc" } },
-        { discNumber: "asc" },
-        { trackNumber: "asc" },
-      ],
-      select: trackSelect,
-    }),
-    prisma.playlist.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-  ]);
+  const tracks = await prisma.track.findMany({
+    orderBy: [
+      { artist: { name: "asc" } },
+      { album: { year: "asc" } },
+      { album: { title: "asc" } },
+      { discNumber: "asc" },
+      { trackNumber: "asc" },
+    ],
+    select: trackSelect,
+  });
 
   return (
     <>
@@ -25,7 +22,7 @@ export default async function LibraryPage() {
       {tracks.length === 0 ? (
         <p className="text-zinc-400">No tracks found. Check your music directory.</p>
       ) : (
-        <TrackList tracks={tracks.map(toPlayerTrack)} playlists={playlists} numbered={false} />
+        <TrackList tracks={tracks.map(toPlayerTrack)} numbered={false} />
       )}
     </>
   );

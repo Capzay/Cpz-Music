@@ -17,11 +17,11 @@ actually playing.
 - **Library** scanned from disk, watched for changes, with album art extracted
   from tags
 - **Player** with queue, shuffle, repeat, and OS media-key integration
-- **Playlists** with reordering
+- **Playlists** with reordering, stored on the device and synced when online
 - **Multi-device control**: one device plays, the others act as remotes
 - **Offline**: download albums to a device and play them with no connection,
-  including seeking. Listens recorded offline are replayed later on the day they
-  actually happened
+  including seeking. Playlists can be created and edited offline and sync later.
+  Listens recorded offline are replayed later on the day they actually happened
 - **Listening stats** by week, month, year, or all time
 - **Jam mode**: send someone a link and they can queue tracks from their phone
   without seeing anything else
@@ -126,8 +126,10 @@ Browser / Electron / Android
 
 **Everything in one app.** Pages are server components that query Prisma
 directly, so there is no REST layer or client-side data fetching to maintain.
-Audio and artwork are the exception: Next.js will not serve arbitrary
-filesystem paths, so those are route handlers implementing HTTP Range.
+Audio, artwork, and playlists are the exceptions: Next.js will not serve
+arbitrary filesystem paths, so those are route handlers implementing HTTP Range;
+playlists live in a device-local store and sync through `/api/playlists/sync`
+so they still work when the server is unreachable.
 
 **The scanner** needs a long-lived watcher, which a request-driven framework has
 nowhere obvious to put. It runs from `instrumentation.ts`, the once-per-boot
@@ -150,7 +152,7 @@ src/
 ├── app/              routes: pages, API handlers, jam, OBS overlay
 ├── lib/              auth, db, scanner, queue maths, tokens, realtime
 ├── components/
-├── store/            zustand: player and downloads
+├── store/            zustand: player, downloads, playlists
 └── instrumentation.ts
 prisma/               schema and migrations, including RLS policies
 electron/             desktop wrapper
@@ -197,8 +199,8 @@ npm run lint
 
 Tests cover the parts that can be silently wrong rather than everything: HTTP
 Range parsing, path traversal, shuffle and queue navigation, playlist
-reordering, invite token signing, the owner gate, the guest allow-list, and
-listen-timestamp clamping.
+reordering and last-write-wins sync, invite token signing, the owner gate, the
+guest allow-list, and listen-timestamp clamping.
 
 ## Licence
 

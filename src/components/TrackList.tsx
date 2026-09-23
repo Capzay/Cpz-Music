@@ -1,16 +1,12 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ListEnd, ListStart, Music, Play, Plus } from "lucide-react";
 import { usePlayerStore } from "@/store/player";
+import { usePlaylists } from "@/store/playlists";
 import { formatDuration } from "@/lib/format";
 import { artworkUrl, type PlayerTrack } from "@/lib/types";
-import { addTracksToPlaylist } from "@/app/(library)/playlists/actions";
-
-export interface PlaylistOption {
-  id: number;
-  name: string;
-}
+import { visiblePlaylists } from "@/lib/playlist-sync";
 
 function Thumb({ track }: { track: PlayerTrack }) {
   return (
@@ -30,22 +26,24 @@ function Thumb({ track }: { track: PlayerTrack }) {
  */
 export function TrackList({
   tracks,
-  playlists = [],
   showAlbum = true,
   numbered = true,
 }: {
   tracks: PlayerTrack[];
-  playlists?: PlaylistOption[];
   showAlbum?: boolean;
   numbered?: boolean;
 }) {
   const dispatch = usePlayerStore((s) => s.dispatch);
   const currentId = usePlayerStore((s) => s.queue[s.index]?.id ?? null);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const playlists = usePlaylists((s) => visiblePlaylists(s.playlists));
+  const addTracks = usePlaylists((s) => s.addTracks);
+  const hydrate = usePlaylists((s) => s.hydrate);
 
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [target, setTarget] = useState<PlayerTrack | null>(null);
-  const [pending, startTransition] = useTransition();
+
+  useEffect(() => hydrate(), [hydrate]);
 
   function openPlaylistPicker(track: PlayerTrack) {
     setTarget(track);
@@ -193,18 +191,15 @@ export function TrackList({
         <p className="mb-3 truncate text-sm font-medium">Add “{target?.title}” to</p>
         <ul className="max-h-64 space-y-1 overflow-y-auto">
           {playlists.map((playlist) => (
-            <li key={playlist.id}>
+            <li key={playlist.uuid}>
               <button
-                disabled={pending}
                 onClick={() => {
                   const track = target;
                   if (!track) return;
-                  startTransition(async () => {
-                    await addTracksToPlaylist(playlist.id, [track.id]);
-                    dialogRef.current?.close();
-                  });
+                  addTracks(playlist.uuid, [track]);
+                  dialogRef.current?.close();
                 }}
-                className="w-full truncate rounded px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+                className="w-full truncate rounded px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-700"
               >
                 {playlist.name}
               </button>

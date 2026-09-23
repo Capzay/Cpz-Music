@@ -247,7 +247,7 @@ export function AddToPlaylistButton({
       <dialog
         ref={dialogRef}
         onClose={close}
-        className="m-auto flex h-[min(40rem,90vh)] w-full max-w-lg flex-col rounded-lg border border-zinc-700 bg-zinc-900 p-0 text-white backdrop:bg-black/60"
+        className="m-auto h-[min(40rem,90vh)] w-full max-w-lg flex-col rounded-lg border border-zinc-700 bg-zinc-900 p-0 text-white open:flex backdrop:bg-black/60"
       >
         <div className="border-b border-zinc-800 px-4 py-3">
           <p className="text-sm font-medium">Add songs</p>

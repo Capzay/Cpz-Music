@@ -22,7 +22,8 @@ const config: CapacitorConfig = {
   },
   android: {
     allowMixedContent: false,
-    webContentsDebuggingEnabled: false,
+    // Opt in while iterating: CPZ_WEB_DEBUG=1 npm run apk
+    webContentsDebuggingEnabled: process.env.CPZ_WEB_DEBUG === "1",
   },
 };
 

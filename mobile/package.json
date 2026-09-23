@@ -6,8 +6,12 @@
   "scripts": {
     "sync": "cap sync android",
     "open": "cap open android",
-    "build:debug": "cd android && ./gradlew assembleDebug",
-    "build:release": "cd android && ./gradlew assembleRelease"
+    "doctor": "./scripts/apk.sh doctor",
+    "apk": "./scripts/apk.sh debug",
+    "apk:install": "./scripts/apk.sh install",
+    "apk:release": "./scripts/apk.sh release",
+    "build:debug": "./scripts/apk.sh debug",
+    "build:release": "./scripts/apk.sh release"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",

@@ -8,7 +8,7 @@ vi.mock("@/store/downloads", () => ({
 }));
 
 import { useDownloads } from "@/store/downloads";
-import { queueForPlayback } from "@/lib/offline-play";
+import { canPlayTrack, queueForPlayback } from "@/lib/offline-play";
 
 function track(id: number): PlayerTrack {
   return {
@@ -21,6 +21,18 @@ function track(id: number): PlayerTrack {
     album: { id: 1, title: "al", hasArtwork: false },
   };
 }
+
+describe("canPlayTrack", () => {
+  it("streams anything while online", () => {
+    expect(canPlayTrack(true, false)).toBe(true);
+    expect(canPlayTrack(true, true)).toBe(true);
+  });
+
+  it("requires a download while offline", () => {
+    expect(canPlayTrack(false, true)).toBe(true);
+    expect(canPlayTrack(false, false)).toBe(false);
+  });
+});
 
 describe("queueForPlayback", () => {
   beforeEach(() => {

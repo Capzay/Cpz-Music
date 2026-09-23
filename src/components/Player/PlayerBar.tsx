@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ListMusic, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from "lucide-react";
 import { useAudio } from "@/hooks/useAudio";
+import { usePlayableTrack } from "@/hooks/usePlayableTrack";
 import { useSync } from "@/hooks/useSync";
 import { usePlayerStore, useCurrentTrack } from "@/store/player";
 import { artworkUrl, type PlayerTrack } from "@/lib/types";
@@ -24,6 +25,7 @@ export function PlayerBar() {
   const shuffle = usePlayerStore((s) => s.shuffle);
   const repeat = usePlayerStore((s) => s.repeat);
   const dispatch = usePlayerStore((s) => s.dispatch);
+  const canPlay = usePlayableTrack();
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
@@ -45,8 +47,12 @@ export function PlayerBar() {
       >
         <Artwork track={track} />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{track.title}</p>
-          <p className="text-xs text-zinc-400 truncate">{track.artist.name}</p>
+          <p className={`text-sm font-medium truncate ${canPlay(track.id) ? "" : "opacity-40"}`}>
+            {track.title}
+          </p>
+          <p className="text-xs text-zinc-400 truncate">
+            {canPlay(track.id) ? track.artist.name : "Not downloaded"}
+          </p>
         </div>
         <button
           onClick={(e) => {
@@ -65,11 +71,17 @@ export function PlayerBar() {
         <div className="flex items-center gap-3 w-56 flex-shrink-0">
           <Artwork track={track} />
           <div className="min-w-0">
-            <p className="text-sm font-medium truncate">{track.title}</p>
+            <p className={`text-sm font-medium truncate ${canPlay(track.id) ? "" : "opacity-40"}`}>
+              {track.title}
+            </p>
             <p className="text-xs text-zinc-400 truncate">
-              <Link href={`/artists/${track.artist.id}`} className="hover:text-white">
-                {track.artist.name}
-              </Link>
+              {canPlay(track.id) ? (
+                <Link href={`/artists/${track.artist.id}`} className="hover:text-white">
+                  {track.artist.name}
+                </Link>
+              ) : (
+                "Not downloaded"
+              )}
             </p>
           </div>
         </div>

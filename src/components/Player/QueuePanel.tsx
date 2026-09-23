@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { usePlayableTrack } from "@/hooks/usePlayableTrack";
 import { usePlayerStore, useCurrentTrack } from "@/store/player";
 import { artworkUrl, type PlayerTrack } from "@/lib/types";
 
@@ -36,6 +37,7 @@ export function QueuePanel({ onClose }: { onClose: () => void }) {
   const dispatch = usePlayerStore((s) => s.dispatch);
   const currentTrack = useCurrentTrack();
   const upcoming = useUpcoming();
+  const canPlay = usePlayableTrack();
 
   return (
     <div
@@ -58,9 +60,11 @@ export function QueuePanel({ onClose }: { onClose: () => void }) {
           <p className="text-xs text-zinc-500 mb-1 uppercase tracking-wide">Now playing</p>
           <div className="flex items-center gap-2">
             <Thumb track={currentTrack} />
-            <div className="min-w-0">
+            <div className={`min-w-0 ${canPlay(currentTrack.id) ? "" : "opacity-40"}`}>
               <p className="text-sm font-medium truncate text-violet-400">{currentTrack.title}</p>
-              <p className="text-xs text-zinc-400 truncate">{currentTrack.artist.name}</p>
+              <p className="text-xs text-zinc-400 truncate">
+                {canPlay(currentTrack.id) ? currentTrack.artist.name : "Not downloaded"}
+              </p>
             </div>
           </div>
         </div>
@@ -74,20 +78,28 @@ export function QueuePanel({ onClose }: { onClose: () => void }) {
             <p className="text-xs text-zinc-500 px-4 pt-2 pb-1 uppercase tracking-wide">
               Next up · {upcoming.length}
             </p>
-            {upcoming.map(({ track, queueIdx }) => (
+            {upcoming.map(({ track, queueIdx }) => {
+              const playable = canPlay(track.id);
+              return (
               <div
                 key={`${track.id}-${queueIdx}`}
-                className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-800/50 group"
+                className={`flex items-center gap-2 px-4 py-1.5 group ${playable ? "hover:bg-zinc-800/50" : ""}`}
               >
                 <button
                   onClick={() => dispatch({ type: "jumpTo", index: queueIdx })}
-                  className="flex items-center gap-2 min-w-0 flex-1 text-left"
-                  aria-label={`Play ${track.title}`}
+                  disabled={!playable}
+                  title={playable ? undefined : "Not downloaded"}
+                  className={`flex items-center gap-2 min-w-0 flex-1 text-left ${
+                    playable ? "" : "cursor-not-allowed opacity-40"
+                  }`}
+                  aria-label={playable ? `Play ${track.title}` : `${track.title} is not downloaded`}
                 >
                   <Thumb track={track} size="w-7 h-7" />
                   <span className="min-w-0">
                     <span className="block text-sm truncate">{track.title}</span>
-                    <span className="block text-xs text-zinc-400 truncate">{track.artist.name}</span>
+                    <span className="block text-xs text-zinc-400 truncate">
+                      {playable ? track.artist.name : "Not downloaded"}
+                    </span>
                   </span>
                 </button>
                 <button
@@ -99,7 +111,8 @@ export function QueuePanel({ onClose }: { onClose: () => void }) {
                   <X size={12} />
                 </button>
               </div>
-            ))}
+              );
+            })}
           </>
         )}
       </div>

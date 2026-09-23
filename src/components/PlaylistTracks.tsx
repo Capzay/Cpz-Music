@@ -1,10 +1,9 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Play, X } from "lucide-react";
-import { useEffect } from "react";
 import { usePlayerStore } from "@/store/player";
 import { usePlaylists } from "@/store/playlists";
-import { useDownloads } from "@/store/downloads";
+import { usePlayableTrack } from "@/hooks/usePlayableTrack";
 import { queueForPlayback } from "@/lib/offline-play";
 import { formatDuration } from "@/lib/format";
 import { artworkUrl, type PlayerTrack } from "@/lib/types";
@@ -20,9 +19,7 @@ export function PlaylistTracks({
   const currentId = usePlayerStore((s) => s.queue[s.index]?.id ?? null);
   const removeTrack = usePlaylists((s) => s.removeTrack);
   const moveTrack = usePlaylists((s) => s.moveTrack);
-  const hydrateDownloads = useDownloads((s) => s.hydrate);
-
-  useEffect(() => hydrateDownloads(), [hydrateDownloads]);
+  const canPlay = usePlayableTrack();
 
   function playFrom(i: number) {
     const next = queueForPlayback(tracks, i);
@@ -31,20 +28,28 @@ export function PlaylistTracks({
 
   return (
     <div className="flex flex-col">
-      {tracks.map((track, i) => (
+      {tracks.map((track, i) => {
+        const playable = canPlay(track.id);
+        return (
         <div
           key={`${track.id}-${i}`}
-          className="group flex items-center gap-3 px-2 py-2 hover:bg-zinc-800/50"
+          className={`group flex items-center gap-3 px-2 py-2 ${playable ? "hover:bg-zinc-800/50" : ""}`}
         >
           <button
             type="button"
             onClick={() => playFrom(i)}
-            aria-label={`Play ${track.title}`}
-            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+            disabled={!playable}
+            title={playable ? undefined : "Not downloaded"}
+            aria-label={playable ? `Play ${track.title}` : `${track.title} is not downloaded`}
+            className={`flex min-w-0 flex-1 items-center gap-3 text-left ${
+              playable ? "cursor-pointer" : "cursor-not-allowed opacity-40"
+            }`}
           >
             <span className="w-6 shrink-0 text-right text-sm tabular-nums text-zinc-400">
-              <span className="group-hover:hidden">{i + 1}</span>
-              <Play size={14} fill="white" className="ml-auto hidden text-white group-hover:block" />
+              <span className={playable ? "group-hover:hidden" : ""}>{i + 1}</span>
+              {playable ? (
+                <Play size={14} fill="white" className="ml-auto hidden text-white group-hover:block" />
+              ) : null}
             </span>
 
             <div className="w-8 h-8 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
@@ -62,7 +67,9 @@ export function PlaylistTracks({
               >
                 {track.title}
               </p>
-              <p className="text-xs text-zinc-400 truncate">{track.artist.name}</p>
+              <p className="text-xs text-zinc-400 truncate">
+                {playable ? track.artist.name : `${track.artist.name} · Not downloaded`}
+              </p>
             </div>
           </button>
 
@@ -100,11 +107,12 @@ export function PlaylistTracks({
             </button>
           </div>
 
-          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-zinc-500">
+          <span className={`w-10 shrink-0 text-right text-xs tabular-nums text-zinc-500 ${playable ? "" : "opacity-40"}`}>
             {formatDuration(track.duration)}
           </span>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

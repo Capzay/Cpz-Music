@@ -1,20 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
 import { Play, Shuffle } from "lucide-react";
 import { usePlayerStore } from "@/store/player";
-import { useDownloads } from "@/store/downloads";
+import { usePlayableTrack } from "@/hooks/usePlayableTrack";
 import { queueForPlayback } from "@/lib/offline-play";
 import type { PlayerTrack } from "@/lib/types";
 
 export function PlayAlbumButton({ tracks }: { tracks: PlayerTrack[] }) {
   const dispatch = usePlayerStore((s) => s.dispatch);
   const shuffle = usePlayerStore((s) => s.shuffle);
-  const hydrateDownloads = useDownloads((s) => s.hydrate);
-
-  useEffect(() => hydrateDownloads(), [hydrateDownloads]);
+  const canPlay = usePlayableTrack();
 
   if (tracks.length === 0) return null;
+
+  const blocked = tracks.every((track) => !canPlay(track.id));
 
   function playAll(startIndex: number) {
     const next = queueForPlayback(tracks, startIndex);
@@ -25,7 +24,13 @@ export function PlayAlbumButton({ tracks }: { tracks: PlayerTrack[] }) {
     <div className="flex gap-2">
       <button
         onClick={() => playAll(0)}
-        className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors"
+        disabled={blocked}
+        title={blocked ? "Download songs to play them offline" : undefined}
+        className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+          blocked
+            ? "cursor-not-allowed bg-violet-600/40 text-white/70"
+            : "bg-violet-600 hover:bg-violet-500 text-white"
+        }`}
       >
         <Play size={16} fill="white" />
         Play All
@@ -47,7 +52,13 @@ export function PlayAlbumButton({ tracks }: { tracks: PlayerTrack[] }) {
             startIndex: Math.floor(Math.random() * next.tracks.length),
           });
         }}
-        className="flex items-center gap-2 border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-4 py-2 rounded-full text-sm font-medium transition-colors"
+        disabled={blocked}
+        title={blocked ? "Download songs to play them offline" : undefined}
+        className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+          blocked
+            ? "cursor-not-allowed border border-zinc-700 text-zinc-600"
+            : "border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white"
+        }`}
       >
         <Shuffle size={16} />
         Shuffle

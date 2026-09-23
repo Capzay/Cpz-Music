@@ -1,6 +1,11 @@
 import { useDownloads } from "@/store/downloads";
 import type { PlayerTrack } from "@/lib/types";
 
+/** Online, every track can stream. Offline, only a downloaded copy can play. */
+export function canPlayTrack(online: boolean, downloaded: boolean): boolean {
+  return online || downloaded;
+}
+
 /**
  * When offline, drop tracks that were never downloaded so the player does not
  * race through a queue of failing streams. Online, the list is unchanged.

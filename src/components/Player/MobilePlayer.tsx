@@ -13,6 +13,7 @@ import {
   SkipForward,
   X,
 } from "lucide-react";
+import { usePlayableTrack } from "@/hooks/usePlayableTrack";
 import { usePlayerStore, useCurrentTrack } from "@/store/player";
 import { artworkUrl } from "@/lib/types";
 import { DevicePicker } from "./DevicePicker";
@@ -27,6 +28,7 @@ export function MobilePlayer({ onClose }: { onClose: () => void }) {
   const repeat = usePlayerStore((s) => s.repeat);
   const isActiveDevice = usePlayerStore((s) => s.isActiveDevice);
   const dispatch = usePlayerStore((s) => s.dispatch);
+  const canPlay = usePlayableTrack();
 
   const [showQueue, setShowQueue] = useState(false);
   const upcoming = useUpcoming();
@@ -58,8 +60,12 @@ export function MobilePlayer({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="w-full text-center">
-          <p className="text-xl font-bold truncate">{track.title}</p>
-          <p className="text-zinc-400 truncate">{track.artist.name}</p>
+          <p className={`text-xl font-bold truncate ${canPlay(track.id) ? "" : "opacity-40"}`}>
+            {track.title}
+          </p>
+          <p className="text-zinc-400 truncate">
+            {canPlay(track.id) ? track.artist.name : "Not downloaded"}
+          </p>
           {!isActiveDevice && (
             <p className="text-xs text-violet-400 mt-1">Listening on another device</p>
           )}
@@ -186,18 +192,24 @@ export function MobilePlayer({ onClose }: { onClose: () => void }) {
                 <p className="text-xs text-zinc-500 pb-2 uppercase tracking-wide">
                   Next up · {upcoming.length}
                 </p>
-                {upcoming.map(({ track: queued, queueIdx }) => (
+                {upcoming.map(({ track: queued, queueIdx }) => {
+                  const playable = canPlay(queued.id);
+                  return (
                   <div key={`${queued.id}-${queueIdx}`} className="flex items-center gap-3 py-2">
                     <button
                       onClick={() => dispatch({ type: "jumpTo", index: queueIdx })}
-                      className="flex items-center gap-3 min-w-0 flex-1 text-left"
-                      aria-label={`Play ${queued.title}`}
+                      disabled={!playable}
+                      title={playable ? undefined : "Not downloaded"}
+                      className={`flex items-center gap-3 min-w-0 flex-1 text-left ${
+                        playable ? "" : "cursor-not-allowed opacity-40"
+                      }`}
+                      aria-label={playable ? `Play ${queued.title}` : `${queued.title} is not downloaded`}
                     >
                       <Thumb track={queued} size="w-10 h-10" />
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm truncate">{queued.title}</span>
                         <span className="block text-xs text-zinc-400 truncate">
-                          {queued.artist.name}
+                          {playable ? queued.artist.name : "Not downloaded"}
                         </span>
                       </span>
                     </button>
@@ -209,7 +221,8 @@ export function MobilePlayer({ onClose }: { onClose: () => void }) {
                       <X size={16} />
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </>
             )}
           </div>

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ListEnd, ListStart, Music, Play, Plus } from "lucide-react";
 import { usePlayerStore } from "@/store/player";
 import { usePlaylists } from "@/store/playlists";
-import { useDownloads } from "@/store/downloads";
+import { usePlayableTrack } from "@/hooks/usePlayableTrack";
 import { queueForPlayback } from "@/lib/offline-play";
 import { formatDuration } from "@/lib/format";
 import { artworkUrl, type PlayerTrack } from "@/lib/types";
@@ -41,15 +41,14 @@ export function TrackList({
   const playlists = visiblePlaylists(usePlaylists((s) => s.playlists));
   const addTracks = usePlaylists((s) => s.addTracks);
   const hydrate = usePlaylists((s) => s.hydrate);
-  const hydrateDownloads = useDownloads((s) => s.hydrate);
+  const canPlay = usePlayableTrack();
 
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [target, setTarget] = useState<PlayerTrack | null>(null);
 
   useEffect(() => {
     hydrate();
-    hydrateDownloads();
-  }, [hydrate, hydrateDownloads]);
+  }, [hydrate]);
 
   function playFrom(i: number) {
     const next = queueForPlayback(tracks, i);
@@ -65,17 +64,19 @@ export function TrackList({
     <div className="flex items-center gap-1 pointer-events-none opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100">
       <button
         onClick={() => dispatch({ type: "playNext", track })}
-        title="Play next"
-        aria-label={`Play ${track.title} next`}
-        className="p-1 text-zinc-500 hover:text-white transition-colors"
+        title={canPlay(track.id) ? "Play next" : "Not downloaded"}
+        aria-label={canPlay(track.id) ? `Play ${track.title} next` : `${track.title} is not downloaded`}
+        disabled={!canPlay(track.id)}
+        className="p-1 text-zinc-500 hover:text-white transition-colors disabled:cursor-not-allowed disabled:hover:text-zinc-500"
       >
         <ListStart size={14} />
       </button>
       <button
         onClick={() => dispatch({ type: "addToQueue", track })}
-        title="Add to queue"
-        aria-label={`Add ${track.title} to queue`}
-        className="p-1 text-zinc-500 hover:text-white transition-colors"
+        title={canPlay(track.id) ? "Add to queue" : "Not downloaded"}
+        aria-label={canPlay(track.id) ? `Add ${track.title} to queue` : `${track.title} is not downloaded`}
+        disabled={!canPlay(track.id)}
+        className="p-1 text-zinc-500 hover:text-white transition-colors disabled:cursor-not-allowed disabled:hover:text-zinc-500"
       >
         <ListEnd size={14} />
       </button>
@@ -109,30 +110,44 @@ export function TrackList({
         <tbody>
           {tracks.map((track, i) => {
             const isCurrent = track.id === currentId;
+            const playable = canPlay(track.id);
             return (
               <tr
                 key={track.id}
-                className={`group cursor-pointer hover:bg-zinc-800/50 ${
-                  isCurrent ? "text-violet-400" : ""
-                }`}
-                onClick={() => playFrom(i)}
+                title={playable ? undefined : "Not downloaded"}
+                aria-disabled={!playable}
+                className={`group ${
+                  playable ? "cursor-pointer hover:bg-zinc-800/50" : "cursor-not-allowed opacity-40"
+                } ${isCurrent ? "text-violet-400" : ""}`}
+                onClick={() => {
+                  if (playable) playFrom(i);
+                }}
               >
                 {numbered && (
                   <td className="py-2 pl-4 pr-2 w-10 text-zinc-400 text-sm">
-                    <span className="group-hover:hidden">
+                    <span className={playable ? "group-hover:hidden" : ""}>
                       {isCurrent && isPlaying ? (
                         <Music size={14} className="text-violet-400" />
                       ) : (
                         (track.trackNumber ?? i + 1)
                       )}
                     </span>
-                    <Play size={14} fill="white" className="hidden text-white group-hover:block" />
+                    {playable ? (
+                      <Play size={14} fill="white" className="hidden text-white group-hover:block" />
+                    ) : null}
                   </td>
                 )}
                 <td className="py-2 pr-4 text-sm font-medium max-w-xs">
                   <div className="flex items-center gap-3 min-w-0">
                     <Thumb track={track} />
-                    <span className="truncate">{track.title}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate">{track.title}</span>
+                      {playable ? null : (
+                        <span className="block truncate text-xs font-normal text-zinc-500">
+                          Not downloaded
+                        </span>
+                      )}
+                    </span>
                   </div>
                 </td>
                 <td className="py-2 pr-4 text-sm text-zinc-400 truncate max-w-xs">
@@ -157,12 +172,20 @@ export function TrackList({
 
       {/* Mobile list */}
       <div className="md:hidden flex flex-col">
-        {tracks.map((track, i) => (
+        {tracks.map((track, i) => {
+          const playable = canPlay(track.id);
+          return (
           <div
             key={track.id}
-            className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-800/50 cursor-pointer"
-            onClick={() => playFrom(i)}
+            title={playable ? undefined : "Not downloaded"}
+            className={`flex items-center gap-3 px-3 py-2 ${
+              playable ? "hover:bg-zinc-800/50 cursor-pointer" : "cursor-not-allowed"
+            }`}
+            onClick={() => {
+              if (playable) playFrom(i);
+            }}
           >
+            <div className={`flex min-w-0 flex-1 items-center gap-3 ${playable ? "" : "opacity-40"}`}>
             <Thumb track={track} />
             <div className="flex-1 min-w-0">
               <p
@@ -172,7 +195,10 @@ export function TrackList({
               >
                 {track.title}
               </p>
-              <p className="text-xs text-zinc-400 truncate">{track.artist.name}</p>
+              <p className="text-xs text-zinc-400 truncate">
+                {playable ? track.artist.name : `${track.artist.name} · Not downloaded`}
+              </p>
+            </div>
             </div>
             {playlists.length > 0 && (
               <button
@@ -186,11 +212,12 @@ export function TrackList({
                 <Plus size={16} />
               </button>
             )}
-            <span className="text-xs text-zinc-500 tabular-nums">
+            <span className={`text-xs text-zinc-500 tabular-nums ${playable ? "" : "opacity-40"}`}>
               {formatDuration(track.duration)}
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Native dialog: modal semantics, focus trapping and Escape for free. */}

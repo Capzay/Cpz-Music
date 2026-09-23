@@ -16,17 +16,17 @@ import {
 } from "lucide-react";
 import { usePlaylists } from "@/store/playlists";
 import { visiblePlaylists } from "@/lib/playlist-sync";
-import { PlaylistLink } from "@/components/PlaylistLink";
+import { OfflineAwareLink, PlaylistLink } from "@/components/PlaylistLink";
 
 const LINKS = [
   { href: "/", icon: LibraryIcon, label: "Library" },
   { href: "/albums", icon: Disc3, label: "Albums" },
   { href: "/artists", icon: Mic2, label: "Artists" },
-  { href: "/playlists", icon: ListMusic, label: "Playlists" },
+  { href: "/playlists", icon: ListMusic, label: "Playlists", offline: true },
   { href: "/search", icon: Search, label: "Search" },
   { href: "/stats", icon: BarChart2, label: "Stats" },
-  { href: "/downloads", icon: Download, label: "Offline" },
-];
+  { href: "/downloads", icon: Download, label: "Offline", offline: true },
+] as const;
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -52,17 +52,21 @@ export function Sidebar() {
       </div>
 
       <div className="flex flex-col gap-0.5 px-2">
-        {LINKS.map(({ href, icon: Icon, label }) => (
-          <Link
-            key={href}
-            href={href}
-            aria-current={isActive(pathname, href) ? "page" : undefined}
-            className={linkClass(isActive(pathname, href))}
-          >
-            <Icon size={18} />
-            <span>{label}</span>
-          </Link>
-        ))}
+        {LINKS.map((link) => {
+          const { href, icon: Icon, label } = link;
+          const NavLink = "offline" in link && link.offline ? OfflineAwareLink : Link;
+          return (
+            <NavLink
+              key={href}
+              href={href}
+              aria-current={isActive(pathname, href) ? "page" : undefined}
+              className={linkClass(isActive(pathname, href))}
+            >
+              <Icon size={18} />
+              <span>{label}</span>
+            </NavLink>
+          );
+        })}
         <Link
           href="/settings"
           aria-current={isActive(pathname, "/settings") ? "page" : undefined}
@@ -101,19 +105,23 @@ export function MobileNav() {
 
   return (
     <nav className="md:hidden flex items-center justify-around bg-zinc-900 border-t border-zinc-800 pb-safe">
-      {LINKS.map(({ href, icon: Icon, label }) => (
-        <Link
-          key={href}
-          href={href}
-          aria-current={isActive(pathname, href) ? "page" : undefined}
-          className={`flex flex-col items-center gap-0.5 py-2 px-2 text-xs transition-colors ${
-            isActive(pathname, href) ? "text-violet-400" : "text-zinc-400"
-          }`}
-        >
-          <Icon size={20} />
-          <span>{label}</span>
-        </Link>
-      ))}
+      {LINKS.map((link) => {
+        const { href, icon: Icon, label } = link;
+        const NavLink = "offline" in link && link.offline ? OfflineAwareLink : Link;
+        return (
+          <NavLink
+            key={href}
+            href={href}
+            aria-current={isActive(pathname, href) ? "page" : undefined}
+            className={`flex flex-col items-center gap-0.5 py-2 px-2 text-xs transition-colors ${
+              isActive(pathname, href) ? "text-violet-400" : "text-zinc-400"
+            }`}
+          >
+            <Icon size={20} />
+            <span>{label}</span>
+          </NavLink>
+        );
+      })}
     </nav>
   );
 }

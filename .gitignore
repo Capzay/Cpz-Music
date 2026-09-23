@@ -61,10 +61,12 @@ next-env.d.ts
 /electron/release
 /electron/node_modules
 /mobile/node_modules
+/mobile/dist
 /mobile/android/build
 /mobile/android/app/build
 /mobile/android/.gradle
 /mobile/android/local.properties
+/mobile/android/keystore.properties
 /mobile/android/app/src/main/assets/public
 /mobile/android/app/src/main/assets/capacitor.config.json
 /mobile/android/capacitor-cordova-android-plugins

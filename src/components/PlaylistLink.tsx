@@ -16,6 +16,36 @@ export function goOfflineAware(href: string, push: (href: string) => void) {
   push(href);
 }
 
+/**
+ * Soft navigations need a network round-trip for RSC. Offline-capable pages
+ * (playlists, downloads) must fall back to a full load so the service worker
+ * can serve the cached document instead.
+ */
+export function OfflineAwareLink({
+  href,
+  className,
+  "aria-current": ariaCurrent,
+  children,
+}: {
+  href: string;
+  className?: string;
+  "aria-current"?: "page" | undefined;
+  children: ReactNode;
+}) {
+  function onClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      event.preventDefault();
+      location.assign(href);
+    }
+  }
+
+  return (
+    <Link href={href} className={className} aria-current={ariaCurrent} onClick={onClick}>
+      {children}
+    </Link>
+  );
+}
+
 export function PlaylistLink({
   uuid,
   className,
@@ -25,18 +55,9 @@ export function PlaylistLink({
   className?: string;
   children: ReactNode;
 }) {
-  const href = playlistHref(uuid);
-
-  function onClick(event: MouseEvent<HTMLAnchorElement>) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      event.preventDefault();
-      location.assign(href);
-    }
-  }
-
   return (
-    <Link href={href} className={className} onClick={onClick}>
+    <OfflineAwareLink href={playlistHref(uuid)} className={className}>
       {children}
-    </Link>
+    </OfflineAwareLink>
   );
 }

@@ -103,12 +103,22 @@ neither is installed by the web app.
 cd electron && npm install && npm start          # dev
 cd electron && npm run dist:linux                # AppImage
 
-cd mobile && npm install && npx cap sync android
-cd mobile && npm run build:debug                 # needs the Android SDK
+cd mobile && npm install
+cd mobile && npm run doctor                      # check JDK / SDK / adb
+cd mobile && npm run apk                         # sync + debug APK → mobile/dist/
+cd mobile && npm run apk:install                 # build, adb install, launch
 ```
 
-Point them at your own deployment with `CPZ_SERVER_URL` (Electron) or
-`server.url` in `mobile/capacitor.config.ts` (Android).
+`npm run apk` runs `cap sync` then Gradle, so `CPZ_SERVER_URL` is baked in
+without editing config by hand. Point either shell at your own deployment:
+
+```bash
+CPZ_SERVER_URL=https://music.example.com npm start          # Electron
+CPZ_SERVER_URL=https://music.example.com npm run apk        # Android
+```
+
+Release builds need a keystore (`mobile/android/keystore.properties.example`).
+Chrome WebView debugging: `CPZ_WEB_DEBUG=1 npm run apk`.
 
 ## Architecture
 

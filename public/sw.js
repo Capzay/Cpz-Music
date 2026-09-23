@@ -13,6 +13,10 @@
  * Nothing authenticated or live is cached: no stats, no jam, no now-playing.
  * Offline playlist detail URLs fall back to the cached /playlists document
  * with the id in the hash; the page reads the local store.
+ *
+ * Soft Next.js navigations never hit this worker as navigations, so pages are
+ * also precached while online (activate + client message) with their script
+ * tags pulled into the static cache.
  */
 
 const STATIC_CACHE = "cpz-static-v1";
@@ -22,9 +26,13 @@ const ARTWORK_CACHE = "cpz-artwork-v2";
 
 const KNOWN = [STATIC_CACHE, PAGE_CACHE, AUDIO_CACHE, ARTWORK_CACHE];
 
+/** Pages that work from local state and must be reachable with no network. */
+const PRECACHE_PAGES = ["/playlists", "/downloads"];
+
 const STREAM_RE = /^\/api\/tracks\/\d+\/stream$/;
 const ARTWORK_RE = /^\/api\/artwork\/\d+$/;
 const PLAYLIST_DETAIL_RE = /^\/playlists\/([^/]+)\/?$/;
+const STATIC_ASSET_RE = /(?:src|href)="(\/_next\/static\/[^"]+)"/g;
 
 self.addEventListener("install", () => self.skipWaiting());
 
@@ -36,8 +44,15 @@ self.addEventListener("activate", (event) => {
         names.filter((n) => n.startsWith("cpz-") && !KNOWN.includes(n)).map((n) => caches.delete(n)),
       );
       await self.clients.claim();
+      await precacheOfflinePages();
     })(),
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "precache") {
+    event.waitUntil(precacheOfflinePages());
+  }
 });
 
 self.addEventListener("fetch", (event) => {
@@ -76,6 +91,46 @@ function isSensitive(url) {
   );
 }
 
+/**
+ * Soft navigations never populate PAGE_CACHE, so pull the offline-capable
+ * documents (and the hashed scripts they reference) while we still have a
+ * network. Redirects are skipped so a stale session cannot cache /login.
+ */
+async function precacheOfflinePages() {
+  const pageCache = await caches.open(PAGE_CACHE);
+  const staticCache = await caches.open(STATIC_CACHE);
+
+  await Promise.all(
+    PRECACHE_PAGES.map(async (path) => {
+      try {
+        const response = await fetch(path, { credentials: "same-origin" });
+        if (!response.ok || response.redirected || isSensitive(new URL(response.url))) return;
+
+        const html = await response.clone().text();
+        await pageCache.put(path, response);
+
+        const assets = new Set();
+        for (const match of html.matchAll(STATIC_ASSET_RE)) {
+          assets.add(new URL(match[1], self.location.origin).href);
+        }
+        await Promise.all(
+          [...assets].map(async (assetUrl) => {
+            try {
+              if (await staticCache.match(assetUrl)) return;
+              const asset = await fetch(assetUrl);
+              if (asset.ok) await staticCache.put(assetUrl, asset);
+            } catch {
+              // Best effort; a later online visit will fill the gap.
+            }
+          }),
+        );
+      } catch {
+        // Still offline, or the auth cookie expired. Retry on the next message.
+      }
+    }),
+  );
+}
+
 async function handleNavigation(request) {
   const url = new URL(request.url);
   try {
@@ -107,8 +162,36 @@ async function handleNavigation(request) {
     if (downloads) return downloads;
 
     return new Response(
-      "<h1>Offline</h1><p>Open this page once while online to make it available offline.</p>",
-      { status: 503, headers: { "Content-Type": "text/html" } },
+      `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Offline</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      background: #09090b;
+      color: #a1a1aa;
+      font: 15px/1.5 system-ui, sans-serif;
+      text-align: center;
+      padding: 1.5rem;
+    }
+    h1 { color: #fafafa; font-size: 1.25rem; margin: 0 0 0.5rem; }
+    p { margin: 0; max-width: 22rem; }
+  </style>
+</head>
+<body>
+  <div>
+    <h1>Offline</h1>
+    <p>Open Playlists or Offline once while online so this device can cache them.</p>
+  </div>
+</body>
+</html>`,
+      { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   }
 }

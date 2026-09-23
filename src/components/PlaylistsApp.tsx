@@ -56,7 +56,7 @@ export function PlaylistsApp({ routeId }: { routeId?: string }) {
 }
 
 function PlaylistsList() {
-  const playlists = usePlaylists((s) => visiblePlaylists(s.playlists));
+  const playlists = visiblePlaylists(usePlaylists((s) => s.playlists));
   const hydrated = usePlaylists((s) => s.hydrated);
   const create = usePlaylists((s) => s.create);
   const router = useRouter();

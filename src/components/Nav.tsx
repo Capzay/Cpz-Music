@@ -48,7 +48,9 @@ const linkClass = (active: boolean) =>
 
 export function Sidebar() {
   const pathname = useShellPathname();
-  const playlists = usePlaylists((s) => visiblePlaylists(s.playlists));
+  // Select the store array itself — wrapping in visiblePlaylists inside the
+  // selector returns a new array every call and loops with useSyncExternalStore.
+  const playlists = visiblePlaylists(usePlaylists((s) => s.playlists));
   const hydrate = usePlaylists((s) => s.hydrate);
 
   useEffect(() => hydrate(), [hydrate]);

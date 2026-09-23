@@ -36,7 +36,7 @@ export function TrackList({
   const dispatch = usePlayerStore((s) => s.dispatch);
   const currentId = usePlayerStore((s) => s.queue[s.index]?.id ?? null);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const playlists = usePlaylists((s) => visiblePlaylists(s.playlists));
+  const playlists = visiblePlaylists(usePlaylists((s) => s.playlists));
   const addTracks = usePlaylists((s) => s.addTracks);
   const hydrate = usePlaylists((s) => s.hydrate);
 

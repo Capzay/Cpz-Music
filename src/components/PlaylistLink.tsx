@@ -2,24 +2,17 @@
 
 import Link from "next/link";
 import type { MouseEvent, ReactNode } from "react";
+import { clearOfflinePath, goOfflineAware, navigateOffline } from "@/lib/offline-nav";
 
 export function playlistHref(uuid: string) {
   return `/playlists/${uuid}`;
 }
 
-/** Next client navigations fetch RSC, which fails offline for unseen playlist URLs. */
-export function goOfflineAware(href: string, push: (href: string) => void) {
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
-    location.assign(href);
-    return;
-  }
-  push(href);
-}
+export { goOfflineAware };
 
 /**
- * Soft navigations need a network round-trip for RSC. Offline-capable pages
- * (playlists, downloads) must fall back to a full load so the service worker
- * can serve the cached document instead.
+ * Soft navigations need a network round-trip for RSC. Offline, stay inside the
+ * already-loaded shell and swap the outlet instead of reloading the document.
  */
 export function OfflineAwareLink({
   href,
@@ -35,8 +28,10 @@ export function OfflineAwareLink({
   function onClick(event: MouseEvent<HTMLAnchorElement>) {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       event.preventDefault();
-      location.assign(href);
+      navigateOffline(href);
+      return;
     }
+    clearOfflinePath();
   }
 
   return (

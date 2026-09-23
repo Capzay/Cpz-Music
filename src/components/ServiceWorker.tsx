@@ -23,7 +23,7 @@ export function ServiceWorker() {
         if (cancelled) return;
 
         // Soft Next navigations never populate the page cache. Ask the worker
-        // to pull /playlists and /downloads (plus their scripts) while online.
+        // to pull the offline shell (/, /playlists, /downloads) while online.
         const ready = await navigator.serviceWorker.ready;
         if (cancelled) return;
         requestPrecache(ready.active);

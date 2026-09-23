@@ -10,6 +10,7 @@ import { PlaylistTracks } from "@/components/PlaylistTracks";
 import { PlaylistHeader } from "@/components/PlaylistHeader";
 import { PlaylistLink, goOfflineAware, playlistHref } from "@/components/PlaylistLink";
 import { findPlaylist, visiblePlaylists } from "@/lib/playlist-sync";
+import { replaceOffline } from "@/lib/offline-nav";
 
 export function PlaylistsApp({ routeId }: { routeId?: string }) {
   const hydrate = usePlaylists((s) => s.hydrate);
@@ -34,8 +35,16 @@ export function PlaylistsApp({ routeId }: { routeId?: string }) {
 
   function closeDetail() {
     if (hashId) {
-      history.replaceState(null, "", "/playlists");
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        replaceOffline("/playlists");
+      } else {
+        history.replaceState(null, "", "/playlists");
+      }
       setHashId(null);
+      return;
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      replaceOffline("/playlists");
       return;
     }
     goOfflineAware("/playlists", (href) => router.push(href));

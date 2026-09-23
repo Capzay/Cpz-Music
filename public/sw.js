@@ -14,9 +14,10 @@
  * Offline playlist detail URLs fall back to the cached /playlists document
  * with the id in the hash; the page reads the local store.
  *
- * Soft Next.js navigations never hit this worker as navigations, so pages are
- * also precached while online (activate + client message) with their script
- * tags pulled into the static cache.
+ * Soft Next.js navigations never hit this worker as navigations, so shell pages
+ * are also precached while online. Supabase often refreshes the session cookie
+ * on HTML responses; Cache.put rejects Set-Cookie, so those headers are stripped
+ * before storing or the page cache would stay empty forever.
  */
 
 const STATIC_CACHE = "cpz-static-v1";
@@ -26,8 +27,8 @@ const ARTWORK_CACHE = "cpz-artwork-v2";
 
 const KNOWN = [STATIC_CACHE, PAGE_CACHE, AUDIO_CACHE, ARTWORK_CACHE];
 
-/** Pages that work from local state and must be reachable with no network. */
-const PRECACHE_PAGES = ["/playlists", "/downloads"];
+/** Documents that should open with no network (shell + local-state pages). */
+const SHELL_PAGES = ["/", "/playlists", "/downloads"];
 
 const STREAM_RE = /^\/api\/tracks\/\d+\/stream$/;
 const ARTWORK_RE = /^\/api\/artwork\/\d+$/;
@@ -44,14 +45,14 @@ self.addEventListener("activate", (event) => {
         names.filter((n) => n.startsWith("cpz-") && !KNOWN.includes(n)).map((n) => caches.delete(n)),
       );
       await self.clients.claim();
-      await precacheOfflinePages();
+      await precacheShellPages();
     })(),
   );
 });
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "precache") {
-    event.waitUntil(precacheOfflinePages());
+    event.waitUntil(precacheShellPages());
   }
 });
 
@@ -92,22 +93,52 @@ function isSensitive(url) {
 }
 
 /**
- * Soft navigations never populate PAGE_CACHE, so pull the offline-capable
- * documents (and the hashed scripts they reference) while we still have a
- * network. Redirects are skipped so a stale session cannot cache /login.
+ * Cache.put rejects any response that carries Set-Cookie. Auth refresh puts
+ * those on ordinary HTML navigations, so strip them before storing.
  */
-async function precacheOfflinePages() {
-  const pageCache = await caches.open(PAGE_CACHE);
+async function toCacheResponse(response) {
+  const headers = new Headers(response.headers);
+  headers.delete("Set-Cookie");
+  headers.delete("Set-Cookie2");
+  return new Response(await response.blob(), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function putPage(path, response) {
+  const cache = await caches.open(PAGE_CACHE);
+  await cache.put(path, await toCacheResponse(response));
+}
+
+async function matchPage(path) {
+  const cache = await caches.open(PAGE_CACHE);
+  return (
+    (await cache.match(path)) ||
+    (await cache.match(new URL(path, self.location.origin).href))
+  );
+}
+
+/**
+ * Soft navigations never populate PAGE_CACHE, so pull the shell documents (and
+ * the hashed scripts they reference) while we still have a network. Redirects
+ * are skipped so a stale session cannot cache /login.
+ */
+async function precacheShellPages() {
   const staticCache = await caches.open(STATIC_CACHE);
 
   await Promise.all(
-    PRECACHE_PAGES.map(async (path) => {
+    SHELL_PAGES.map(async (path) => {
       try {
-        const response = await fetch(path, { credentials: "same-origin" });
+        const response = await fetch(path, {
+          credentials: "same-origin",
+          headers: { Accept: "text/html" },
+        });
         if (!response.ok || response.redirected || isSensitive(new URL(response.url))) return;
 
         const html = await response.clone().text();
-        await pageCache.put(path, response);
+        await putPage(path, response);
 
         const assets = new Set();
         for (const match of html.matchAll(STATIC_ASSET_RE)) {
@@ -139,30 +170,37 @@ async function handleNavigation(request) {
     // Only cache a real page. A redirect means the auth gate turned us away, and
     // caching that would serve the login page offline forever after.
     if (response.ok && !response.redirected && !isSensitive(url)) {
-      const cache = await caches.open(PAGE_CACHE);
-      cache.put(url.pathname, response.clone()).catch(() => {});
+      putPage(url.pathname, response.clone()).catch(() => {});
     }
     return response;
   } catch {
-    const cached = await caches.match(url.pathname, { cacheName: PAGE_CACHE });
-    if (cached) return cached;
+    return offlineNavigation(url);
+  }
+}
 
-    // Playlist detail is a client page that reads the local store. A URL that
-    // was never opened while online has no cached RSC, so bounce to the list
-    // document with the id in the hash.
-    const playlistMatch = PLAYLIST_DETAIL_RE.exec(url.pathname);
-    if (playlistMatch) {
-      const list = await caches.match("/playlists", { cacheName: PAGE_CACHE });
-      if (list) {
-        return Response.redirect(`${url.origin}/playlists#${encodeURIComponent(playlistMatch[1])}`);
-      }
+async function offlineNavigation(url) {
+  const exact = await matchPage(url.pathname);
+  if (exact) return exact;
+
+  // Playlist detail is a client page that reads the local store. A URL that
+  // was never opened while online has no cached document, so bounce to the
+  // list with the id in the hash.
+  const playlistMatch = PLAYLIST_DETAIL_RE.exec(url.pathname);
+  if (playlistMatch && (await matchPage("/playlists"))) {
+    return Response.redirect(`${url.origin}/playlists#${encodeURIComponent(playlistMatch[1])}`);
+  }
+
+  // Serve a real shell at its own URL so hydration matches the path. Returning
+  // another page's HTML under / is what produced a broken white/offline screen.
+  for (const path of SHELL_PAGES) {
+    if (path === url.pathname) continue;
+    if (await matchPage(path)) {
+      return Response.redirect(`${url.origin}${path}`);
     }
+  }
 
-    const downloads = await caches.match("/downloads", { cacheName: PAGE_CACHE });
-    if (downloads) return downloads;
-
-    return new Response(
-      `<!DOCTYPE html>
+  return new Response(
+    `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -187,13 +225,12 @@ async function handleNavigation(request) {
 <body>
   <div>
     <h1>Offline</h1>
-    <p>Open Playlists or Offline once while online so this device can cache them.</p>
+    <p>Connect once while signed in so this device can cache the app shell.</p>
   </div>
 </body>
 </html>`,
-      { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } },
-    );
-  }
+    { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } },
+  );
 }
 
 async function cacheFirst(request, cacheName) {

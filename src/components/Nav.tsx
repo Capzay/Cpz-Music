@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,10 +16,11 @@ import {
 } from "lucide-react";
 import { usePlaylists } from "@/store/playlists";
 import { visiblePlaylists } from "@/lib/playlist-sync";
+import { getOfflinePath, subscribeOfflinePath } from "@/lib/offline-nav";
 import { OfflineAwareLink, PlaylistLink } from "@/components/PlaylistLink";
 
 const LINKS = [
-  { href: "/", icon: LibraryIcon, label: "Library" },
+  { href: "/", icon: LibraryIcon, label: "Library", offline: true },
   { href: "/albums", icon: Disc3, label: "Albums" },
   { href: "/artists", icon: Mic2, label: "Artists" },
   { href: "/playlists", icon: ListMusic, label: "Playlists", offline: true },
@@ -32,13 +33,21 @@ function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
+/** Next's pathname stays stale across offline pushState navigations. */
+function useShellPathname() {
+  const nextPath = usePathname();
+  const offlinePath = useSyncExternalStore(subscribeOfflinePath, getOfflinePath, () => null);
+  if (!offlinePath) return nextPath;
+  return offlinePath.split(/[?#]/)[0] || nextPath;
+}
+
 const linkClass = (active: boolean) =>
   `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
     active ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
   }`;
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const pathname = useShellPathname();
   const playlists = usePlaylists((s) => visiblePlaylists(s.playlists));
   const hydrate = usePlaylists((s) => s.hydrate);
 
@@ -101,7 +110,7 @@ export function Sidebar() {
 }
 
 export function MobileNav() {
-  const pathname = usePathname();
+  const pathname = useShellPathname();
 
   return (
     <nav className="md:hidden flex items-center justify-around bg-zinc-900 border-t border-zinc-800 pb-safe">

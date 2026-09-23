@@ -1,7 +1,8 @@
 "use client";
 
 import { create } from "zustand";
-import { streamUrl, type PlayerTrack } from "@/lib/types";
+import { type PlayerTrack } from "@/lib/types";
+import { AUDIO_CACHE, audioCacheKey } from "@/lib/offline-audio";
 
 /**
  * Explicit offline downloads. Audio bytes live in the Cache Storage bucket the
@@ -9,7 +10,6 @@ import { streamUrl, type PlayerTrack } from "@/lib/types";
  * enumerating a cache of whole albums on every render is far too slow.
  */
 
-const AUDIO_CACHE = "cpz-audio-v1";
 const REGISTRY_KEY = "cpz-downloads-v1";
 const CONCURRENCY = 2;
 
@@ -55,7 +55,7 @@ export const useDownloads = create<DownloadState>((set, get) => {
   let running = 0;
 
   async function fetchOne(track: PlayerTrack) {
-    const url = new URL(streamUrl(track.id), location.origin).toString();
+    const url = audioCacheKey(track.id);
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -122,7 +122,7 @@ export const useDownloads = create<DownloadState>((set, get) => {
 
     remove: async (trackId) => {
       const cache = await caches.open(AUDIO_CACHE);
-      await cache.delete(new URL(streamUrl(trackId), location.origin).toString());
+      await cache.delete(audioCacheKey(trackId));
       const registry = { ...get().registry };
       delete registry[trackId];
       saveRegistry(registry);

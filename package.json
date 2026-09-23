@@ -22,7 +22,7 @@
     "chokidar": "^5.0.0",
     "lucide-react": "^1.28.0",
     "music-metadata": "^11.14.0",
-    "next": "16.2.12",
+    "next": "16.3.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
@@ -35,21 +35,22 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "eslint": "^9",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.3.6",
     "prisma": "^7.9.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "description": "Self-hosted personal music streamer",
   "overrides": {
     "brace-expansion": "^5.0.9",
     "deepmerge-ts": "^8.0.2",
     "fast-uri": "^3.1.5",
-    "js-yaml": "^4.3.1",
+    "js-yaml": "^4.3.2",
     "minimatch": "^10.0.3",
+    "mysql2": "^3.24.4",
     "nanoid": "^3.3.18",
     "postcss": "^8.5.18",
-    "sharp": "^0.35.0"
+    "sharp": "^0.35.4"
   }
 }

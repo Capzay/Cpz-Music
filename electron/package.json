@@ -38,9 +38,10 @@
     }
   },
   "overrides": {
+    "@xmldom/xmldom": "^0.8.15",
     "brace-expansion": "^5.0.9",
     "fast-uri": "^3.1.5",
-    "js-yaml": "^4.3.1",
+    "js-yaml": "^4.3.2",
     "minimatch": "^10.0.3"
   }
 }

@@ -37,7 +37,7 @@ actually playing.
 ## Setup
 
 ```bash
-git clone https://github.com/<you>/cpz-music.git
+git clone https://github.com/Capzay/cpz-music.git
 cd cpz-music
 npm install
 cp .env.example .env.local

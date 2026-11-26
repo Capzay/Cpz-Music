@@ -1,0 +1,154 @@
+import { Spinner } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { App, Playback, AlbumItem, ArtistItem, DeviceItem } from "state.slint";
+import { NavItem, IconButton, TrackItem } from "widgets.slint";
+import { AlbumsPage, ArtistsPage, AlbumPage, ArtistPage, SearchPage, SetupPage, SignInPage } from "pages.slint";
+import { PlayerBar, QueuePanel, DevicesPanel } from "player.slint";
+
+export { App, Playback, AlbumItem, ArtistItem, DeviceItem, TrackItem }
+
+component Sidebar inherits Rectangle {
+    background: Theme.panel;
+    width: 220px;
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        background: Theme.line;
+    }
+
+    VerticalLayout {
+        padding: 14px;
+        padding-top: 20px;
+        spacing: 4px;
+
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-bottom: 18px;
+            spacing: 10px;
+            Rectangle {
+                width: 30px;
+                height: 30px;
+                border-radius: 8px;
+                background: Theme.accent;
+                Image {
+                    source: @image-url("icons/music.svg");
+                    width: 17px;
+                    colorize: white;
+                }
+            }
+            Text {
+                text: "Cpz Music";
+                color: Theme.text;
+                font-size: 17px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+
+        NavItem {
+            text: "Albums";
+            icon: @image-url("icons/album.svg");
+            selected: App.page == "albums";
+            clicked => { App.navigate("albums"); }
+        }
+        NavItem {
+            text: "Artists";
+            icon: @image-url("icons/artist.svg");
+            selected: App.page == "artists";
+            clicked => { App.navigate("artists"); }
+        }
+        NavItem {
+            text: "Search";
+            icon: @image-url("icons/search.svg");
+            selected: App.page == "search";
+            clicked => { App.navigate("search"); }
+        }
+
+        Rectangle { }
+
+        if App.offline: Rectangle {
+            height: 34px;
+            border-radius: Theme.radius;
+            background: #ff6b6b1f;
+            Text {
+                text: "Offline: downloads only";
+                color: Theme.danger;
+                font-size: Theme.size-small;
+            }
+        }
+        Text {
+            text: "Sign out";
+            color: signout.has-hover ? Theme.text : Theme.faint;
+            font-size: Theme.size-small;
+            horizontal-alignment: left;
+            signout := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { App.sign-out(); }
+            }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "Cpz Music";
+    icon: @image-url("icons/music.svg");
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    min-width: 760px;
+    min-height: 520px;
+    background: Theme.bg;
+    default-font-size: Theme.size-body;
+
+    property <bool> signed-out: App.page == "setup" || App.page == "signin";
+
+    if App.page == "setup": SetupPage { }
+    if App.page == "signin": SignInPage { }
+    if App.page == "loading": Spinner {
+        indeterminate: true;
+        width: 36px;
+        height: 36px;
+    }
+
+    if !root.signed-out && App.page != "loading": VerticalLayout {
+        HorizontalLayout {
+            Sidebar { }
+            Rectangle {
+                VerticalLayout {
+                    if App.can-go-back: HorizontalLayout {
+                        height: 44px;
+                        padding-left: 12px;
+                        padding-top: 6px;
+                        alignment: start;
+                        IconButton {
+                            icon: @image-url("icons/back.svg");
+                            size: 20px;
+                            clicked => { App.back(); }
+                        }
+                    }
+                    Rectangle {
+                        if App.page == "albums": AlbumsPage { }
+                        if App.page == "artists": ArtistsPage { }
+                        if App.page == "album": AlbumPage { }
+                        if App.page == "artist": ArtistPage { }
+                        if App.page == "search": SearchPage { }
+                    }
+                }
+
+                if Playback.show-queue: QueuePanel {
+                    x: parent.width - self.width - 12px;
+                    y: 12px;
+                    width: 360px;
+                    height: parent.height - 24px;
+                }
+                if Playback.show-devices: DevicesPanel {
+                    x: parent.width - self.width - 12px;
+                    y: parent.height - self.height - 12px;
+                    width: 320px;
+                    height: min(parent.height - 24px, 72px + max(1, Playback.devices.length) * 60px + (Playback.connected ? 0 : 40px));
+                }
+            }
+        }
+        PlayerBar { }
+    }
+}

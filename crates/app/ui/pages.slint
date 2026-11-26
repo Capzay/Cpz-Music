@@ -1,0 +1,538 @@
+import { ScrollView, Spinner } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { App, AlbumItem, ArtistItem } from "state.slint";
+import { Cover, TrackRow, TrackItem, PlayButton, PrimaryButton, IconButton, Notice, TextField } from "widgets.slint";
+
+component AlbumCard inherits Rectangle {
+    in property <AlbumItem> album;
+    callback clicked;
+
+    VerticalLayout {
+        spacing: 10px;
+        Cover {
+            art: root.album.art;
+            height: self.width;
+            corner: Theme.radius;
+            // A lift on hover, so the grid feels pressable.
+            drop-shadow-blur: touch.has-hover ? 18px : 0;
+            drop-shadow-color: #00000080;
+        }
+        VerticalLayout {
+            spacing: 2px;
+            Text {
+                text: root.album.title;
+                color: Theme.text;
+                font-size: Theme.size-body;
+                font-weight: 600;
+                overflow: elide;
+            }
+            Text {
+                text: root.album.year == "" ? root.album.artist : root.album.artist + " · " + root.album.year;
+                color: Theme.muted;
+                font-size: Theme.size-small;
+                overflow: elide;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Albums in as many columns as fit. Its height follows from `avail`, the width
+// it is given, so it can sit in a scrolling layout without a binding loop.
+component AlbumTiles inherits Rectangle {
+    in property <[AlbumItem]> albums;
+    in property <length> avail;
+    callback open(int);
+
+    property <length> gap: 22px;
+    property <length> min-cell: 160px;
+    property <int> cols: max(1, Math.floor((root.avail + root.gap) / (root.min-cell + root.gap)));
+    property <length> cell: (root.avail - (root.cols - 1) * root.gap) / root.cols;
+    property <length> cell-h: root.cell + 48px;
+
+    width: root.avail;
+    height: max(0px, Math.ceil(root.albums.length / root.cols) * (root.cell-h + root.gap) - root.gap);
+
+    for album[i] in root.albums: AlbumCard {
+        x: Math.mod(i, root.cols) * (root.cell + root.gap);
+        y: Math.floor(i / root.cols) * (root.cell-h + root.gap);
+        width: root.cell;
+        height: root.cell-h;
+        album: album;
+        clicked => { root.open(album.id); }
+    }
+}
+
+component Heading inherits Text {
+    color: Theme.text;
+    font-size: Theme.size-heading;
+    font-weight: 700;
+}
+
+component SubHeading inherits Text {
+    color: Theme.text;
+    font-size: Theme.size-title + 3px;
+    font-weight: 700;
+}
+
+// Loading, failed or empty, else the page itself.
+component PageState inherits Rectangle {
+    in property <bool> empty;
+    in property <string> empty-title;
+    in property <string> empty-body;
+
+    if App.busy && root.empty: Spinner {
+        indeterminate: true;
+        width: 32px;
+        height: 32px;
+    }
+    if !App.busy && App.error != "": VerticalLayout {
+        alignment: center;
+        spacing: 16px;
+        Notice {
+            title: "Couldn't load this";
+            body: App.error;
+        }
+        HorizontalLayout {
+            alignment: center;
+            PrimaryButton {
+                text: "Try again";
+                clicked => { App.retry(); }
+            }
+        }
+    }
+    if !App.busy && App.error == "" && root.empty: Notice {
+        title: root.empty-title;
+        body: root.empty-body;
+    }
+}
+
+export component AlbumsPage inherits Rectangle {
+    if App.albums.length > 0: ScrollView {
+        VerticalLayout {
+            alignment: start;
+            padding: Theme.page-padding;
+            spacing: 22px;
+            Heading { text: "Albums"; }
+            AlbumTiles {
+                albums: App.albums;
+                avail: root.width - 2 * Theme.page-padding;
+                open(id) => { App.open-album(id); }
+            }
+        }
+    }
+    PageState {
+        empty: App.albums.length == 0;
+        empty-title: "No albums yet";
+        empty-body: "Music in the server's library folder shows up here once it has been scanned.";
+    }
+}
+
+component ArtistRow inherits Rectangle {
+    in property <ArtistItem> artist;
+    callback clicked;
+
+    height: 64px;
+    border-radius: Theme.radius;
+    background: touch.has-hover ? Theme.hover : transparent;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        spacing: 14px;
+        Rectangle {
+            width: 44px;
+            height: 44px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 22px;
+            background: Theme.raised;
+            Image {
+                source: @image-url("icons/artist.svg");
+                width: 20px;
+                colorize: Theme.muted;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.artist.name;
+                color: Theme.text;
+                font-size: Theme.size-body;
+                font-weight: 600;
+                overflow: elide;
+            }
+            Text {
+                text: root.artist.detail;
+                color: Theme.muted;
+                font-size: Theme.size-small;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component ArtistsPage inherits Rectangle {
+    if App.artists.length > 0: ScrollView {
+        VerticalLayout {
+            alignment: start;
+            padding: Theme.page-padding;
+            spacing: 4px;
+            Heading { text: "Artists"; }
+            Rectangle { height: 14px; }
+            for artist in App.artists: ArtistRow {
+                artist: artist;
+                clicked => { App.open-artist(artist.id); }
+            }
+        }
+    }
+    PageState {
+        empty: App.artists.length == 0;
+        empty-title: "No artists yet";
+        empty-body: "Artists appear once the library has been scanned.";
+    }
+}
+
+component TrackList inherits VerticalLayout {
+    in property <[TrackItem]> tracks;
+    in property <string> source;
+    in property <bool> show-album;
+    spacing: 0;
+    for track[i] in root.tracks: TrackRow {
+        track: track;
+        show-album: root.show-album;
+        unavailable: App.offline && !track.offline;
+        play => { App.play-list(root.source, i); }
+    }
+}
+
+export component AlbumPage inherits Rectangle {
+    if App.album.id > 0: ScrollView {
+        VerticalLayout {
+            alignment: start;
+            padding: Theme.page-padding;
+            spacing: 28px;
+
+            HorizontalLayout {
+                spacing: 28px;
+                Cover {
+                    art: App.album.art;
+                    width: min(232px, max(120px, root.width * 0.24));
+                    height: self.width;
+                    corner: Theme.radius;
+                }
+                VerticalLayout {
+                    alignment: end;
+                    spacing: 8px;
+                    Text {
+                        text: "ALBUM";
+                        color: Theme.muted;
+                        font-size: Theme.size-small;
+                        font-weight: 600;
+                        letter-spacing: 1.2px;
+                    }
+                    Text {
+                        text: App.album.title;
+                        color: Theme.text;
+                        font-size: Theme.size-hero;
+                        font-weight: 800;
+                        wrap: word-wrap;
+                    }
+                    artist-link := Text {
+                        text: App.album.artist;
+                        color: artist-touch.has-hover ? Theme.text : Theme.muted;
+                        font-size: Theme.size-title;
+                        font-weight: 600;
+                        artist-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { App.navigate("album-artist"); }
+                        }
+                    }
+                    Text {
+                        text: App.album-detail;
+                        color: Theme.faint;
+                        font-size: Theme.size-small;
+                    }
+                    Rectangle { height: 8px; }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        alignment: start;
+                        PlayButton {
+                            size: 52px;
+                            enabled: App.album-tracks.length > 0;
+                            clicked => { App.play-list("album", 0); }
+                        }
+                        IconButton {
+                            icon: @image-url("icons/shuffle.svg");
+                            size: 22px;
+                            y: (parent.height - self.height) / 2;
+                            clicked => { App.shuffle-list("album"); }
+                        }
+                    }
+                }
+            }
+
+            TrackList {
+                tracks: App.album-tracks;
+                source: "album";
+            }
+        }
+    }
+    PageState {
+        empty: App.album.id == 0;
+        empty-title: "Album not found";
+        empty-body: "It may have been removed from the library.";
+    }
+}
+
+export component ArtistPage inherits Rectangle {
+    if App.artist-name != "": ScrollView {
+        VerticalLayout {
+            alignment: start;
+            padding: Theme.page-padding;
+            spacing: 20px;
+
+            VerticalLayout {
+                spacing: 6px;
+                Text {
+                    text: "ARTIST";
+                    color: Theme.muted;
+                    font-size: Theme.size-small;
+                    font-weight: 600;
+                    letter-spacing: 1.2px;
+                }
+                Text {
+                    text: App.artist-name;
+                    color: Theme.text;
+                    font-size: Theme.size-hero;
+                    font-weight: 800;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: App.artist-detail;
+                    color: Theme.faint;
+                    font-size: Theme.size-small;
+                }
+            }
+            HorizontalLayout {
+                spacing: 12px;
+                alignment: start;
+                PlayButton {
+                    size: 52px;
+                    enabled: App.artist-tracks.length > 0;
+                    clicked => { App.play-list("artist", 0); }
+                }
+                IconButton {
+                    icon: @image-url("icons/shuffle.svg");
+                    size: 22px;
+                    y: (parent.height - self.height) / 2;
+                    clicked => { App.shuffle-list("artist"); }
+                }
+            }
+
+            if App.artist-albums.length > 0: SubHeading { text: "Albums"; }
+            if App.artist-albums.length > 0: AlbumTiles {
+                albums: App.artist-albums;
+                avail: root.width - 2 * Theme.page-padding;
+                open(id) => { App.open-album(id); }
+            }
+
+            SubHeading { text: "Songs"; }
+            TrackList {
+                tracks: App.artist-tracks;
+                source: "artist";
+                show-album: true;
+            }
+        }
+    }
+    PageState {
+        empty: App.artist-name == "";
+        empty-title: "Artist not found";
+        empty-body: "They may have been removed from the library.";
+    }
+}
+
+export component SearchPage inherits Rectangle {
+    VerticalLayout {
+        padding: Theme.page-padding;
+        padding-bottom: 0;
+        spacing: 20px;
+
+        Heading { text: "Search"; }
+        search-box := TextField {
+            placeholder: "Songs, albums and artists";
+            text <=> App.search-text;
+            edited(text) => { App.search(text); }
+            accepted(text) => { App.search(text); }
+            init => { self.focus-input(); }
+        }
+
+        if App.search-text == "": Notice {
+            title: "Find something to play";
+            body: "Type to search the whole library.";
+        }
+        if App.search-text != "" && App.search-tracks.length == 0 && App.search-albums.length == 0 && App.search-artists.length == 0 && !App.busy: Notice {
+            title: "Nothing found";
+            body: "No song, album or artist matches \"" + App.search-text + "\".";
+        }
+
+        if App.search-tracks.length + App.search-albums.length + App.search-artists.length > 0: ScrollView {
+            VerticalLayout {
+                alignment: start;
+                padding-bottom: Theme.page-padding;
+                spacing: 18px;
+                if App.search-tracks.length > 0: SubHeading { text: "Songs"; }
+                if App.search-tracks.length > 0: TrackList {
+                    tracks: App.search-tracks;
+                    source: "search";
+                    show-album: true;
+                }
+                if App.search-albums.length > 0: SubHeading { text: "Albums"; }
+                if App.search-albums.length > 0: AlbumTiles {
+                    albums: App.search-albums;
+                    avail: root.width - 2 * Theme.page-padding;
+                    open(id) => { App.open-album(id); }
+                }
+                if App.search-artists.length > 0: SubHeading { text: "Artists"; }
+                for artist in App.search-artists: ArtistRow {
+                    artist: artist;
+                    clicked => { App.open-artist(artist.id); }
+                }
+            }
+        }
+    }
+}
+
+component Card inherits Rectangle {
+    height: layout.preferred-height;
+    background: Theme.panel;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: Theme.line;
+
+    layout := VerticalLayout {
+        padding: 32px;
+        spacing: 16px;
+        @children
+    }
+}
+
+component Brand inherits HorizontalLayout {
+    spacing: 12px;
+    alignment: start;
+    Rectangle {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: Theme.accent;
+        Image {
+            source: @image-url("icons/music.svg");
+            width: 20px;
+            colorize: white;
+        }
+    }
+    Text {
+        text: "Cpz Music";
+        color: Theme.text;
+        font-size: 20px;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+}
+
+export component SetupPage inherits Rectangle {
+    background: Theme.bg;
+    Card {
+        width: min(420px, root.width - 48px);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        Brand { }
+        Text {
+            text: "Which server is your library on?";
+            color: Theme.muted;
+            font-size: Theme.size-body;
+            wrap: word-wrap;
+        }
+        url := TextField {
+            placeholder: "https://music.example.com";
+            text <=> App.server-url;
+            font-size: Theme.size-body;
+            accepted(text) => { App.connect(text); }
+        }
+        if App.setup-error != "": Text {
+            text: App.setup-error;
+            color: Theme.danger;
+            font-size: Theme.size-small;
+            wrap: word-wrap;
+        }
+        PrimaryButton {
+            text: "Connect";
+            busy: App.busy;
+            enabled: App.server-url != "";
+            clicked => { App.connect(App.server-url); }
+        }
+    }
+}
+
+export component SignInPage inherits Rectangle {
+    background: Theme.bg;
+    Card {
+        width: min(420px, root.width - 48px);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        Brand { }
+        Text {
+            text: App.signing-in
+                ? "Finish signing in in your browser, then come back here."
+                : "Sign in with the GitHub account that owns this library.";
+            color: Theme.muted;
+            font-size: Theme.size-body;
+            wrap: word-wrap;
+        }
+        if App.setup-error != "": Text {
+            text: App.setup-error;
+            color: Theme.danger;
+            font-size: Theme.size-small;
+            wrap: word-wrap;
+        }
+        PrimaryButton {
+            text: "Sign in with GitHub";
+            icon: @image-url("icons/github.svg");
+            has-icon: true;
+            busy: App.signing-in;
+            clicked => { App.sign-in(); }
+        }
+        HorizontalLayout {
+            alignment: space-between;
+            Text {
+                text: App.server-url;
+                color: Theme.faint;
+                font-size: Theme.size-small;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Text {
+                text: App.signing-in ? "Cancel" : "Change server";
+                color: link.has-hover ? Theme.text : Theme.muted;
+                font-size: Theme.size-small;
+                link := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        if App.signing-in {
+                            App.cancel-sign-in();
+                        } else {
+                            App.navigate("setup");
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

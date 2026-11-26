@@ -1,0 +1,351 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Playback, App, DeviceItem } from "state.slint";
+import { Cover, IconButton, PlayButton, SeekBar, TrackItem } from "widgets.slint";
+
+component Transport inherits HorizontalLayout {
+    in property <length> play-size: 40px;
+    alignment: center;
+    spacing: 8px;
+    IconButton {
+        icon: @image-url("icons/shuffle.svg");
+        size: 17px;
+        active: Playback.shuffle;
+        y: (parent.height - self.height) / 2;
+        clicked => { Playback.toggle-shuffle(); }
+    }
+    IconButton {
+        icon: @image-url("icons/prev.svg");
+        size: 20px;
+        enabled: Playback.has-track;
+        y: (parent.height - self.height) / 2;
+        clicked => { Playback.prev(); }
+    }
+    PlayButton {
+        size: root.play-size;
+        playing: Playback.playing;
+        enabled: Playback.has-track;
+        clicked => { Playback.toggle(); }
+    }
+    IconButton {
+        icon: @image-url("icons/next.svg");
+        size: 20px;
+        enabled: Playback.has-track;
+        y: (parent.height - self.height) / 2;
+        clicked => { Playback.next(); }
+    }
+    IconButton {
+        icon: Playback.repeat == 2 ? @image-url("icons/repeat-one.svg") : @image-url("icons/repeat.svg");
+        size: 17px;
+        active: Playback.repeat != 0;
+        y: (parent.height - self.height) / 2;
+        clicked => { Playback.cycle-repeat(); }
+    }
+}
+
+component TimeText inherits Text {
+    color: Theme.muted;
+    font-size: 11px;
+    vertical-alignment: center;
+    min-width: 36px;
+}
+
+export component PlayerBar inherits Rectangle {
+    background: Theme.panel;
+    height: Playback.remote ? 112px : 88px;
+
+    Rectangle {
+        y: 0;
+        height: 1px;
+        background: Theme.line;
+    }
+
+    VerticalLayout {
+        if Playback.remote: Rectangle {
+            height: 24px;
+            background: Theme.accent;
+            HorizontalLayout {
+                alignment: center;
+                spacing: 8px;
+                Image {
+                    source: @image-url("icons/devices.svg");
+                    width: 14px;
+                    colorize: white;
+                }
+                Text {
+                    text: "Playing on " + Playback.active-device;
+                    color: white;
+                    font-size: Theme.size-small;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 12px;
+            padding-bottom: 12px;
+            spacing: 16px;
+
+            // What is playing.
+            HorizontalLayout {
+                width: max(200px, root.width * 0.28);
+                spacing: 12px;
+                if Playback.has-track: Cover {
+                    art: Playback.art;
+                    width: 56px;
+                    height: 56px;
+                    y: (parent.height - self.height) / 2;
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { App.open-album(Playback.album-id); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 3px;
+                    Text {
+                        text: Playback.has-track ? Playback.title : "Nothing playing";
+                        color: Playback.has-track ? Theme.text : Theme.faint;
+                        font-size: Theme.size-body;
+                        font-weight: 600;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: Playback.error != "" ? Playback.error : Playback.artist;
+                        color: Playback.error != "" ? Theme.danger : Theme.muted;
+                        font-size: Theme.size-small;
+                        overflow: elide;
+                    }
+                }
+            }
+
+            // Transport and position.
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                Transport { }
+                HorizontalLayout {
+                    spacing: 8px;
+                    TimeText {
+                        text: Playback.position-text;
+                        horizontal-alignment: right;
+                    }
+                    SeekBar {
+                        value: Playback.duration > 0 ? Playback.position / Playback.duration : 0;
+                        buffered: Playback.buffered;
+                        enabled: Playback.has-track && Playback.duration > 0;
+                        changed(fraction) => { Playback.seek(fraction); }
+                    }
+                    TimeText { text: Playback.duration-text; }
+                }
+            }
+
+            // Where it plays, and how loud.
+            HorizontalLayout {
+                width: max(200px, root.width * 0.28);
+                alignment: end;
+                spacing: 4px;
+                IconButton {
+                    icon: @image-url("icons/queue.svg");
+                    size: 18px;
+                    active: Playback.show-queue;
+                    y: (parent.height - self.height) / 2;
+                    clicked => {
+                        Playback.show-devices = false;
+                        Playback.show-queue = !Playback.show-queue;
+                    }
+                }
+                IconButton {
+                    icon: @image-url("icons/devices.svg");
+                    size: 18px;
+                    active: Playback.show-devices || Playback.remote;
+                    y: (parent.height - self.height) / 2;
+                    clicked => {
+                        Playback.show-queue = false;
+                        Playback.show-devices = !Playback.show-devices;
+                    }
+                }
+                IconButton {
+                    icon: Playback.volume == 0 ? @image-url("icons/mute.svg") : @image-url("icons/volume.svg");
+                    size: 18px;
+                    y: (parent.height - self.height) / 2;
+                    clicked => { Playback.set-volume(Playback.volume == 0 ? 1 : 0); }
+                }
+                SeekBar {
+                    width: 100px;
+                    y: (parent.height - self.height) / 2;
+                    value: Playback.volume;
+                    buffered: 0;
+                    changed(level) => { Playback.set-volume(level); }
+                }
+            }
+        }
+    }
+}
+
+component SidePanel inherits Rectangle {
+    in property <string> title;
+    callback close;
+
+    background: Theme.panel;
+    border-width: 1px;
+    border-color: Theme.line;
+    border-radius: 12px;
+    drop-shadow-blur: 24px;
+    drop-shadow-color: #00000099;
+
+    // Swallows clicks so they do not reach the page underneath.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+        HorizontalLayout {
+            padding-left: 8px;
+            Text {
+                text: root.title;
+                color: Theme.text;
+                font-size: Theme.size-title;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            IconButton {
+                icon: @image-url("icons/close.svg");
+                size: 16px;
+                clicked => { root.close(); }
+            }
+        }
+        @children
+    }
+}
+
+component QueueRow inherits Rectangle {
+    in property <TrackItem> track;
+    in property <bool> current;
+    callback play;
+    callback remove;
+
+    height: 52px;
+    border-radius: 6px;
+    background: current ? Theme.raised : (touch.has-hover ? Theme.hover : transparent);
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.play(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 4px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.track.title;
+                color: root.current ? Theme.accent : Theme.text;
+                font-size: Theme.size-body;
+                font-weight: root.current ? 600 : 400;
+                overflow: elide;
+            }
+            Text {
+                text: root.track.artist;
+                color: Theme.muted;
+                font-size: Theme.size-small;
+                overflow: elide;
+            }
+        }
+        if !root.current && touch.has-hover: IconButton {
+            icon: @image-url("icons/close.svg");
+            size: 14px;
+            y: (parent.height - self.height) / 2;
+            clicked => { root.remove(); }
+        }
+    }
+}
+
+export component QueuePanel inherits SidePanel {
+    title: "Queue";
+    close => { Playback.show-queue = false; }
+
+    if Playback.queue.length == 0: Text {
+        text: "Nothing queued. Play an album or a song and it shows up here.";
+        color: Theme.muted;
+        font-size: Theme.size-body;
+        wrap: word-wrap;
+        vertical-alignment: top;
+    }
+    if Playback.queue.length > 0: ListView {
+        for track[i] in Playback.queue: QueueRow {
+            track: track;
+            current: i == Playback.queue-index;
+            play => { Playback.jump-to(i); }
+            remove => { Playback.remove(i); }
+        }
+    }
+}
+
+component DeviceRow inherits Rectangle {
+    in property <DeviceItem> device;
+    callback clicked;
+
+    height: 56px;
+    border-radius: 8px;
+    background: device.active ? Theme.raised : (touch.has-hover && device.me ? Theme.hover : transparent);
+
+    touch := TouchArea {
+        enabled: root.device.me && !root.device.active;
+        mouse-cursor: self.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+        Image {
+            source: @image-url("icons/devices.svg");
+            width: 20px;
+            colorize: root.device.active ? Theme.accent : Theme.muted;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.device.me ? root.device.name + " (this device)" : root.device.name;
+                color: root.device.active ? Theme.accent : Theme.text;
+                font-size: Theme.size-body;
+                font-weight: 600;
+                overflow: elide;
+            }
+            Text {
+                text: root.device.active ? "Playing" : (root.device.me ? "Tap to play here" : root.device.platform);
+                color: Theme.muted;
+                font-size: Theme.size-small;
+            }
+        }
+    }
+}
+
+export component DevicesPanel inherits SidePanel {
+    title: "Devices";
+    close => { Playback.show-devices = false; }
+
+    if !Playback.connected: Text {
+        text: "Not connected, so this device plays on its own.";
+        color: Theme.muted;
+        font-size: Theme.size-body;
+        wrap: word-wrap;
+    }
+    for device in Playback.devices: DeviceRow {
+        device: device;
+        clicked => {
+            Playback.claim();
+            Playback.show-devices = false;
+        }
+    }
+    Rectangle { }
+}

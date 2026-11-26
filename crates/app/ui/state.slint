@@ -1,0 +1,119 @@
+// The UI's state, filled in from Rust. Screens read these and call back.
+
+import { TrackItem } from "widgets.slint";
+
+export struct AlbumItem {
+    id: int,
+    title: string,
+    artist: string,
+    year: string,
+    art: image,
+}
+
+export struct ArtistItem {
+    id: int,
+    name: string,
+    detail: string,
+}
+
+export struct DeviceItem {
+    id: string,
+    name: string,
+    platform: string,
+    active: bool,
+    me: bool,
+}
+
+export global App {
+    // setup | signin | loading | albums | artists | album | artist | search
+    in-out property <string> page: "loading";
+    in property <bool> can-go-back;
+    // Set while a request for the current page is out.
+    in property <bool> busy;
+    // Shown instead of a page's content when it could not load.
+    in property <string> error;
+    // The server could not be reached; downloads still play.
+    in property <bool> offline;
+
+    in property <[AlbumItem]> albums;
+    in property <[ArtistItem]> artists;
+
+    in property <AlbumItem> album;
+    in property <string> album-detail;
+    in property <[TrackItem]> album-tracks;
+
+    in property <string> artist-name;
+    in property <string> artist-detail;
+    in property <[AlbumItem]> artist-albums;
+    in property <[TrackItem]> artist-tracks;
+
+    in-out property <string> search-text;
+    in property <[TrackItem]> search-tracks;
+    in property <[AlbumItem]> search-albums;
+    in property <[ArtistItem]> search-artists;
+
+    in-out property <string> server-url;
+    in property <string> setup-error;
+    in property <bool> signing-in;
+
+    callback navigate(string);
+    callback back();
+    callback open-album(int);
+    callback open-artist(int);
+    // Plays a list from the page it is on, starting at a track.
+    callback play-list(string, int);
+    callback shuffle-list(string);
+    callback search(string);
+    callback connect(string);
+    callback sign-in();
+    callback cancel-sign-in();
+    callback sign-out();
+    callback retry();
+}
+
+export global Playback {
+    in property <bool> has-track;
+    in property <string> title;
+    in property <string> artist;
+    in property <string> album-title;
+    in property <int> album-id;
+    in property <image> art;
+
+    in property <bool> playing;
+    in property <bool> loading;
+    in property <float> position;
+    in property <float> duration;
+    in property <string> position-text: "0:00";
+    in property <string> duration-text: "0:00";
+    in property <float> buffered: 1;
+    in property <string> error;
+
+    in property <bool> shuffle;
+    // 0 off, 1 all, 2 one.
+    in property <int> repeat;
+    in property <float> volume: 1;
+
+    in property <[TrackItem]> queue;
+    in property <int> queue-index;
+
+    in property <[DeviceItem]> devices;
+    // Another device is playing and this one is its remote.
+    in property <bool> remote;
+    in property <string> active-device;
+    in property <bool> connected;
+
+    in-out property <bool> show-queue;
+    in-out property <bool> show-devices;
+
+    callback toggle();
+    callback next();
+    callback prev();
+    // 0 to 1 of the track.
+    callback seek(float);
+    callback set-volume(float);
+    callback toggle-shuffle();
+    callback cycle-repeat();
+    callback jump-to(int);
+    callback remove(int);
+    callback claim();
+}

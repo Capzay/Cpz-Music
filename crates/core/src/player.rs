@@ -134,6 +134,7 @@ enum Input {
 pub struct Player {
     inputs: Sender<Input>,
     state: watch::Receiver<PlayerState>,
+    thread: Option<thread::JoinHandle<()>>,
 }
 
 pub struct PlayerDeps {
@@ -180,7 +181,7 @@ impl Player {
         };
         core.restore();
 
-        thread::Builder::new()
+        let thread = thread::Builder::new()
             .name("cpz-player".into())
             .spawn(move || {
                 loop {
@@ -205,7 +206,11 @@ impl Player {
             })
             .expect("the OS can start a thread");
 
-        Self { inputs, state }
+        Self {
+            inputs,
+            state,
+            thread: Some(thread),
+        }
     }
 
     pub fn send(&self, command: Command) {
@@ -241,6 +246,10 @@ impl Player {
 impl Drop for Player {
     fn drop(&mut self) {
         let _ = self.inputs.send(Input::Shutdown);
+        // Waits for the queue to be saved, so quitting right after loses nothing.
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
     }
 }
 

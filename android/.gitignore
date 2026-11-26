@@ -1,0 +1,8 @@
+.gradle/
+build/
+local.properties
+# Built by scripts/android.sh from crates/app.
+app/src/main/jniLibs/
+keystore.properties
+*.jks
+*.keystore

@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2024"
 description = "Cpz Music for Linux, Windows and Android"
 
+# Android builds this as a cdylib (`cargo rustc --crate-type cdylib`, see
+# scripts/android.sh); the desktop links it into the binary.
+[lib]
+name = "cpz_app"
+path = "src/lib.rs"
+
 [[bin]]
 name = "cpz-music"
 path = "src/main.rs"
@@ -25,6 +31,12 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 url = "2"
 webbrowser = "1.2.7"
+
+[target.'cfg(target_os = "android")'.dependencies]
+slint = { version = "1.19.1", features = ["backend-android-activity-06"] }
+jni = "0.22"
+ndk-context = "0.1"
+paranoid-android = "0.2"
 
 [build-dependencies]
 slint-build = "1.19.1"

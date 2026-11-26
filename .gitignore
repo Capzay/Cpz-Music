@@ -74,3 +74,6 @@ next-env.d.ts
 *.keystore
 *.jks
 /target
+
+# Android APKs from scripts/android.sh
+/dist

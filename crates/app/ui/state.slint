@@ -84,6 +84,8 @@ export global App {
     callback clear-downloads();
     // Downloads the newer build, swaps it in and restarts.
     callback install-update();
+    // Android back with nothing left to go back to: send the app to the background.
+    callback leave();
 }
 
 export global Playback {

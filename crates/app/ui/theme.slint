@@ -1,6 +1,9 @@
 // Colours, sizes and type in one place, so every screen agrees.
 
 export global Theme {
+    // A phone, or a window too narrow for the sidebar. Set by AppWindow.
+    in-out property <bool> compact;
+
     out property <color> bg: #0e0e11;
     out property <color> panel: #15151a;
     out property <color> raised: #1d1d24;
@@ -15,11 +18,11 @@ export global Theme {
 
     out property <length> radius: 8px;
     out property <length> gap: 16px;
-    out property <length> page-padding: 28px;
+    out property <length> page-padding: compact ? 16px : 28px;
 
     out property <length> size-small: 12px;
     out property <length> size-body: 14px;
     out property <length> size-title: 15px;
-    out property <length> size-heading: 26px;
-    out property <length> size-hero: 34px;
+    out property <length> size-heading: compact ? 24px : 26px;
+    out property <length> size-hero: compact ? 24px : 34px;
 }

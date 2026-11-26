@@ -1,0 +1,57 @@
+plugins {
+    id "com.android.application"
+}
+
+// The version comes from crates/app/Cargo.toml so the APK and the Rust code
+// agree on what the server's update check compares.
+def cargoVersion = file("../../crates/app/Cargo.toml").readLines()
+    .find { it.startsWith("version = ") }
+    .replaceAll(/version = "(.*)"/, '$1')
+def parts = cargoVersion.tokenize(".").collect { it.replaceAll(/\D.*/, "").toInteger() }
+
+// Release signing, from android/keystore.properties (never committed).
+def keystoreFile = rootProject.file("keystore.properties")
+def keystore = new Properties()
+if (keystoreFile.exists()) keystoreFile.withInputStream { keystore.load(it) }
+
+android {
+    namespace "uk.capzay.music"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "uk.capzay.music"
+        minSdk 29
+        targetSdk 36
+        versionName cargoVersion
+        versionCode parts[0] * 1000000 + parts[1] * 1000 + parts[2]
+        ndk { abiFilters "arm64-v8a", "x86_64" }
+    }
+
+    signingConfigs {
+        release {
+            if (keystore["storeFile"]) {
+                storeFile file(keystore["storeFile"])
+                storePassword keystore["storePassword"]
+                keyAlias keystore["keyAlias"]
+                keyPassword keystore["keyPassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keystore["storeFile"] ? signingConfigs.release : null
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        // The Rust library carries its own symbols; stripping is done by cargo.
+        jniLibs { keepDebugSymbols += "**/*.so" }
+    }
+}

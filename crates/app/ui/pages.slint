@@ -375,10 +375,10 @@ export component AlbumPage inherits Rectangle {
         VerticalLayout {
             alignment: start;
             padding: Theme.page-padding;
-            spacing: 28px;
+            spacing: Theme.compact ? 16px : 28px;
 
             HorizontalLayout {
-                spacing: 28px;
+                spacing: Theme.compact ? 16px : 28px;
                 Cover {
                     art: App.album.art;
                     width: min(232px, max(120px, root.width * 0.24));
@@ -438,7 +438,7 @@ export component ArtistPage inherits Rectangle {
             spacing: 14px;
 
             HorizontalLayout {
-                spacing: 28px;
+                spacing: Theme.compact ? 16px : 28px;
                 padding-bottom: 14px;
                 // The first album's cover, in a circle, until artists have photos.
                 Cover {
@@ -628,10 +628,10 @@ export component PlaylistPage inherits Rectangle {
         VerticalLayout {
             alignment: start;
             padding: Theme.page-padding;
-            spacing: 28px;
+            spacing: Theme.compact ? 16px : 28px;
 
             HorizontalLayout {
-                spacing: 28px;
+                spacing: Theme.compact ? 16px : 28px;
                 Cover {
                     art: App.playlist.art;
                     width: min(232px, max(120px, root.width * 0.24));

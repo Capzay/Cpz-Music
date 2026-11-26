@@ -267,7 +267,7 @@ component QueueRow inherits Rectangle {
                 overflow: elide;
             }
         }
-        if !root.current && touch.has-hover: IconButton {
+        if !root.current && (Theme.compact || touch.has-hover): IconButton {
             icon: @image-url("icons/close.svg");
             size: 14px;
             y: (parent.height - self.height) / 2;
@@ -358,4 +358,192 @@ export component DevicesPanel inherits SidePanel {
         }
     }
     Rectangle { }
+}
+
+// ── Phone layout ────────────────────────────────────────────────────────────
+
+// Above the tabs on a phone: what is playing and play/pause. Tap it for the
+// full player.
+export component MiniPlayer inherits Rectangle {
+    callback expand;
+
+    height: Playback.has-track ? 64px : 0px;
+    visible: Playback.has-track;
+    background: Theme.raised;
+
+    touch := TouchArea {
+        clicked => { root.expand(); }
+    }
+
+    // How far through the track, along the top edge.
+    Rectangle {
+        y: 0;
+        height: 2px;
+        x: 0;
+        width: Playback.duration > 0 ? parent.width * Playback.position / Playback.duration : 0;
+        background: Theme.accent;
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 6px;
+        spacing: 12px;
+        Cover {
+            art: Playback.art;
+            width: 44px;
+            height: 44px;
+            corner: 6px;
+            y: (parent.height - self.height) / 2;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+            Text {
+                text: Playback.title;
+                color: Theme.text;
+                font-size: Theme.size-body;
+                font-weight: 600;
+                overflow: elide;
+            }
+            Text {
+                text: Playback.error != "" ? Playback.error
+                    : (Playback.remote ? "Playing on " + Playback.active-device : Playback.artist);
+                color: Playback.error != "" ? Theme.danger : (Playback.remote ? Theme.accent : Theme.muted);
+                font-size: Theme.size-small;
+                overflow: elide;
+            }
+        }
+        IconButton {
+            icon: @image-url("icons/devices.svg");
+            size: 20px;
+            active: Playback.remote;
+            y: (parent.height - self.height) / 2;
+            clicked => {
+                Playback.show-queue = false;
+                Playback.show-devices = true;
+            }
+        }
+        IconButton {
+            icon: Playback.playing ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
+            size: 24px;
+            y: (parent.height - self.height) / 2;
+            clicked => { Playback.toggle(); }
+        }
+    }
+}
+
+// The whole screen on a phone: big cover, the track and every control.
+export component NowPlaying inherits Rectangle {
+    callback close;
+
+    background: Theme.bg;
+    // Swallows touches so they do not reach the page underneath.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: 20px;
+        padding-top: 8px;
+        spacing: 20px;
+
+        HorizontalLayout {
+            IconButton {
+                icon: @image-url("icons/back.svg");
+                size: 22px;
+                clicked => { root.close(); }
+            }
+            Text {
+                text: Playback.remote ? "Playing on " + Playback.active-device : "Now playing";
+                color: Playback.remote ? Theme.accent : Theme.muted;
+                font-size: Theme.size-small;
+                font-weight: 600;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            // Balances the back button so the title stays centred.
+            Rectangle { width: 38px; }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        HorizontalLayout {
+            alignment: center;
+            Cover {
+                art: Playback.art;
+                width: min(root.width - 40px, root.height * 0.45);
+                height: self.width;
+                corner: 12px;
+                TouchArea {
+                    clicked => {
+                        root.close();
+                        App.open-album(Playback.album-id);
+                    }
+                }
+            }
+        }
+
+        VerticalLayout {
+            spacing: 4px;
+            Text {
+                text: Playback.title;
+                color: Theme.text;
+                font-size: 22px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            Text {
+                text: Playback.error != "" ? Playback.error : Playback.artist;
+                color: Playback.error != "" ? Theme.danger : Theme.muted;
+                font-size: Theme.size-title;
+                overflow: elide;
+            }
+        }
+
+        VerticalLayout {
+            spacing: 4px;
+            SeekBar {
+                value: Playback.duration > 0 ? Playback.position / Playback.duration : 0;
+                buffered: Playback.buffered;
+                enabled: Playback.has-track && Playback.duration > 0;
+                changed(fraction) => { Playback.seek(fraction); }
+            }
+            HorizontalLayout {
+                TimeText { text: Playback.position-text; }
+                Rectangle { horizontal-stretch: 1; }
+                TimeText {
+                    text: Playback.duration-text;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+
+        Transport {
+            play-size: 64px;
+            spacing: 20px;
+        }
+
+        HorizontalLayout {
+            alignment: space-between;
+            IconButton {
+                icon: @image-url("icons/devices.svg");
+                size: 22px;
+                active: Playback.remote;
+                clicked => {
+                    Playback.show-queue = false;
+                    Playback.show-devices = true;
+                }
+            }
+            IconButton {
+                icon: @image-url("icons/queue.svg");
+                size: 22px;
+                clicked => {
+                    Playback.show-devices = false;
+                    Playback.show-queue = true;
+                }
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+    }
 }

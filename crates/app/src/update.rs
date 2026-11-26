@@ -1,4 +1,4 @@
-//! Keeps the desktop app current. The server holds the newest build for each
+//! Keeps the app current. The server holds the newest build for each
 //! platform (see the server's `routes/client.rs`); when it is newer than this
 //! one, the app offers to swap its own executable for it and restart.
 
@@ -52,7 +52,8 @@ pub async fn check(api: &Api) -> anyhow::Result<Option<ClientRelease>> {
 }
 
 /// Downloads the build, checks it against its hash and puts it in place of
-/// this executable. Takes effect on the next start.
+/// this executable (takes effect on the next start), or on Android opens the
+/// installer with it.
 pub async fn install(api: &Api, release: &ClientRelease, scratch: &Path) -> anyhow::Result<()> {
     let file = scratch.join(format!("cpz-music-{}.download", release.version));
     api.download_client(&platform(), &file)
@@ -64,14 +65,25 @@ pub async fn install(api: &Api, release: &ClientRelease, scratch: &Path) -> anyh
         let _ = tokio::fs::remove_file(&file).await;
         bail!("the update was damaged on the way (checksum mismatch)");
     }
-    let replaced = tokio::task::spawn_blocking({
-        let file = file.clone();
-        move || self_replace::self_replace(&file)
-    })
-    .await?;
-    let _ = tokio::fs::remove_file(&file).await;
-    replaced.context("could not replace the app")?;
-    Ok(())
+    // Android installs through its package installer, which asks first and
+    // then restarts the app itself.
+    #[cfg(target_os = "android")]
+    let installed = {
+        let apk = file.with_extension("apk");
+        tokio::fs::rename(&file, &apk).await?;
+        crate::android::install_apk(&apk)
+    };
+    #[cfg(not(target_os = "android"))]
+    let installed = {
+        let replaced = tokio::task::spawn_blocking({
+            let file = file.clone();
+            move || self_replace::self_replace(&file)
+        })
+        .await?;
+        let _ = tokio::fs::remove_file(&file).await;
+        replaced.context("could not replace the app")
+    };
+    installed
 }
 
 /// Starts the (new) executable again with the same arguments.

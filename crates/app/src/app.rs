@@ -8,10 +8,7 @@ use std::time::Duration;
 
 use cpz_core::api::{Api, ApiError, ClientRelease, fetch_config};
 use cpz_core::audio::Output;
-use cpz_core::auth::{
-    Credentials, LOOPBACK_PORT, Pkce, Session, SupabaseAuth, authorize_url, loopback_redirect,
-    receive_code,
-};
+use cpz_core::auth::{Credentials, Pkce, Session, SupabaseAuth, authorize_url};
 use cpz_core::downloads::Downloads;
 use cpz_core::listens::Listens;
 use cpz_core::player::{Command, Player, PlayerDeps};
@@ -174,6 +171,10 @@ fn platform() -> &'static str {
 
 /// The machine's name, which is what people recognise in a device list.
 fn device_name() -> String {
+    #[cfg(target_os = "android")]
+    if let Some(name) = crate::android::device_name() {
+        return name;
+    }
     let host = std::env::var("COMPUTERNAME")
         .ok()
         .or_else(|| std::fs::read_to_string("/proc/sys/kernel/hostname").ok())
@@ -204,8 +205,10 @@ pub fn normalise_server(raw: &str) -> Option<String> {
     } else {
         format!("https://{trimmed}")
     };
+    // The parsed form, so "Http://" from a phone keyboard comes out lower case.
     let parsed = url::Url::parse(&url).ok()?;
-    matches!(parsed.scheme(), "http" | "https").then(|| url)
+    matches!(parsed.scheme(), "http" | "https")
+        .then(|| parsed.as_str().trim_end_matches('/').to_owned())
 }
 
 impl Ctx {
@@ -365,7 +368,32 @@ impl Ctx {
         }
     }
 
+    /// On Android the browser comes back through a deep link rather than a
+    /// loopback address: Android freezes a backgrounded app within seconds, so
+    /// it could not answer the browser while you are signing in to GitHub.
+    #[cfg(target_os = "android")]
     async fn sign_in_flow(&self, config: &ClientConfig) -> Result<Session, String> {
+        let redirect = crate::android::next_redirect();
+        let pkce = Pkce::new();
+        let url = authorize_url(config, crate::android::REDIRECT, &pkce);
+        webbrowser::open(&url).map_err(|err| format!("Couldn't open a browser: {err}"))?;
+
+        let landed = tokio::time::timeout(SIGN_IN_TIMEOUT, redirect)
+            .await
+            .map_err(|_| "Sign-in timed out.".to_owned())?
+            .map_err(|_| "Sign-in was replaced by a newer one.".to_owned())?;
+        let landed = url::Url::parse(&landed).map_err(|err| format!("Sign-in failed: {err}"))?;
+        let code = cpz_core::auth::code_from_redirect(&landed)
+            .map_err(|err| format!("Sign-in failed: {err}"))?;
+        SupabaseAuth::new(self.shared.http.clone(), config.clone())
+            .exchange(&code, &pkce.verifier)
+            .await
+            .map_err(|err| format!("Sign-in failed: {err}"))
+    }
+
+    #[cfg(not(target_os = "android"))]
+    async fn sign_in_flow(&self, config: &ClientConfig) -> Result<Session, String> {
+        use cpz_core::auth::{LOOPBACK_PORT, loopback_redirect, receive_code};
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", LOOPBACK_PORT))
             .await
             .map_err(|_| {
@@ -585,8 +613,26 @@ impl Ctx {
         let ctx = self.clone();
         let (downloads, art) = (services.downloads.clone(), services.art.clone());
         tokio::spawn(async move {
+            #[cfg(target_os = "android")]
+            let mut shown = (String::new(), String::new(), false);
             loop {
                 let state = changes.borrow_and_update().clone();
+                // Only the device the sound comes out of shows the notification.
+                #[cfg(target_os = "android")]
+                {
+                    let now = match state.player.queue.tracks.get(state.player.queue.index) {
+                        Some(track) if state.is_active => (
+                            track.title.clone(),
+                            track.artist.name.clone(),
+                            state.player.playing,
+                        ),
+                        _ => (String::new(), String::new(), false),
+                    };
+                    if now != shown {
+                        crate::android::now_playing(&now.0, &now.1, now.2);
+                        shown = now;
+                    }
+                }
                 let (downloads, art, ctx2) = (downloads.clone(), art.clone(), ctx.clone());
                 ctx.ui(move |ui| {
                     view::with(|v| {
@@ -1307,6 +1353,16 @@ impl Ctx {
     // ── Wiring ──────────────────────────────────────────────────────────────
 
     pub fn wire(&self, ui: &AppWindow) {
+        #[cfg(target_os = "android")]
+        {
+            let mut commands = crate::android::commands();
+            let ctx = self.clone();
+            tokio::spawn(async move {
+                while let Some(command) = commands.recv().await {
+                    ctx.send(command);
+                }
+            });
+        }
         let app = ui.global::<App>();
         let ctx = self.clone();
         app.on_navigate(move |page| match page.as_str() {
@@ -1326,6 +1382,10 @@ impl Ctx {
         });
         let ctx = self.clone();
         app.on_back(move || ctx.back());
+        app.on_leave(|| {
+            #[cfg(target_os = "android")]
+            crate::android::move_to_back();
+        });
         let ctx = self.clone();
         app.on_open_album(move |id| ctx.open(Route::Album(id)));
         let ctx = self.clone();
@@ -1442,6 +1502,10 @@ mod tests {
         );
         assert_eq!(
             normalise_server(" http://pi.local:3006 ").as_deref(),
+            Some("http://pi.local:3006")
+        );
+        assert_eq!(
+            normalise_server("Http://Pi.local:3006").as_deref(),
             Some("http://pi.local:3006")
         );
         assert_eq!(normalise_server(""), None);

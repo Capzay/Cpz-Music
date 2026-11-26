@@ -23,7 +23,7 @@ use slint::{ComponentHandle, Weak};
 
 use crate::art::Art;
 use crate::view::{
-    self, album_item, artist_hit, artist_item, cover_album, length, playlist_item, plural,
+    self, album_item, artist_hit, artist_item, bytes, cover_album, length, playlist_item, plural,
     track_item,
 };
 use crate::{AlbumItem, App, AppWindow, Playback, PlaylistItem};
@@ -60,6 +60,7 @@ enum Route {
     Playlists,
     /// By uuid.
     Playlist(String),
+    Downloads,
 }
 
 impl Route {
@@ -72,6 +73,7 @@ impl Route {
             Self::Search => "search",
             Self::Playlists => "playlists",
             Self::Playlist(_) => "playlist",
+            Self::Downloads => "downloads",
         }
     }
 }
@@ -84,6 +86,7 @@ struct Lists {
     artist: Vec<PlayerTrack>,
     search: Vec<PlayerTrack>,
     playlist: Vec<PlayerTrack>,
+    downloads: Vec<PlayerTrack>,
 }
 
 impl Lists {
@@ -93,6 +96,7 @@ impl Lists {
             "artist" => &self.artist,
             "search" => &self.search,
             "playlist" => &self.playlist,
+            "downloads" => &self.downloads,
             _ => &[],
         }
     }
@@ -113,6 +117,37 @@ struct Shared {
     artists: Mutex<Option<Vec<ArtistCard>>>,
     album_artist: Mutex<Option<i32>>,
     sign_in: Mutex<Option<tokio::task::AbortHandle>>,
+    /// Shared by every download, so three albums queued at once still only
+    /// fetch two songs at a time.
+    download_slots: Arc<tokio::sync::Semaphore>,
+    progress: Mutex<Progress>,
+}
+
+/// Downloads asked for since the last batch finished.
+#[derive(Default)]
+struct Progress {
+    total: usize,
+    done: usize,
+    failed: usize,
+}
+
+impl Progress {
+    fn status(&self) -> String {
+        if self.done + self.failed < self.total {
+            format!(
+                "Downloading {} of {}",
+                self.done + self.failed + 1,
+                self.total
+            )
+        } else if self.failed > 0 {
+            format!(
+                "{} failed to download",
+                plural(self.failed, "song", "songs")
+            )
+        } else {
+            String::new()
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -184,6 +219,8 @@ impl Ctx {
                 artists: Mutex::new(None),
                 album_artist: Mutex::new(None),
                 sign_in: Mutex::new(None),
+                download_slots: Arc::new(tokio::sync::Semaphore::new(2)),
+                progress: Mutex::new(Progress::default()),
             }),
         }
     }
@@ -690,6 +727,7 @@ impl Ctx {
             Route::Search => {}
             // Playlists live on the device, so there is nothing to wait for.
             Route::Playlists | Route::Playlist(_) => self.refresh_playlists(),
+            Route::Downloads => self.refresh_downloads(),
         }
     }
 
@@ -995,6 +1033,8 @@ impl Ctx {
                 playlists.add_tracks(arg, &[track]);
             }),
             ("new-playlist", _) => self.new_playlist_with(&track.title.clone(), vec![track]),
+            ("download", _) => self.download_tracks(vec![track]),
+            ("remove-download", _) => self.remove_download(track.id),
             ("album", _) => self.open(Route::Album(track.album.id)),
             ("artist", _) => self.open(Route::Artist(track.artist.id)),
             ("up", Some(id)) if index > 0 => self.edit_playlists(|playlists| {
@@ -1020,6 +1060,8 @@ impl Ctx {
             for track in tracks {
                 self.send(Command::Append { track });
             }
+        } else if action == "download" {
+            self.download_tracks(tracks);
         } else if action == "new-playlist" {
             self.new_playlist_with(&name, tracks);
         } else if let Some(uuid) = action.strip_prefix("add-to:") {
@@ -1027,6 +1069,113 @@ impl Ctx {
                 playlists.add_tracks(uuid, &tracks);
             });
         }
+    }
+
+    // ── Downloads ───────────────────────────────────────────────────────────
+
+    fn refresh_downloads(&self) {
+        let Some(services) = self.services() else {
+            return;
+        };
+        let saved = services.downloads.list();
+        let tracks: Vec<PlayerTrack> = saved.iter().map(|d| d.track.clone()).collect();
+        let size: u64 = saved.iter().map(|d| d.bytes).sum();
+        let detail = format!(
+            "{} · {}",
+            plural(tracks.len(), "song", "songs"),
+            bytes(size)
+        );
+        let rows = self.track_rows(&services, &tracks, false);
+        self.shared.lists.lock().unwrap().downloads = tracks;
+        self.ui(move |ui| {
+            ui.global::<App>().set_downloads_detail(detail.into());
+            view::with(|v| v.downloads.set_vec(rows));
+        });
+    }
+
+    fn show_progress(&self) {
+        let status = self.shared.progress.lock().unwrap().status();
+        self.ui(move |ui| ui.global::<App>().set_download_status(status.into()));
+    }
+
+    fn download_tracks(&self, tracks: Vec<PlayerTrack>) {
+        let Some(services) = self.services() else {
+            return;
+        };
+        let wanted: Vec<PlayerTrack> = tracks
+            .into_iter()
+            .filter(|t| !services.downloads.is_downloaded(t.id))
+            .collect();
+        if wanted.is_empty() {
+            return;
+        }
+        {
+            let mut progress = self.shared.progress.lock().unwrap();
+            // A finished batch's failures are old news once a new one starts.
+            if progress.done + progress.failed >= progress.total {
+                *progress = Progress::default();
+            }
+            progress.total += wanted.len();
+        }
+        self.show_progress();
+
+        for track in wanted {
+            let (ctx, services) = (self.clone(), services.clone());
+            let slots = self.shared.download_slots.clone();
+            tokio::spawn(async move {
+                let _slot = slots.acquire().await;
+                let result = services.downloads.download(&services.api, &track).await;
+                let finished = {
+                    let mut progress = ctx.shared.progress.lock().unwrap();
+                    match &result {
+                        Ok(()) => progress.done += 1,
+                        Err(err) => {
+                            tracing::warn!("could not download {}: {err}", track.title);
+                            progress.failed += 1;
+                        }
+                    }
+                    progress.done + progress.failed >= progress.total
+                };
+                if result.is_ok() {
+                    let id = track.id;
+                    ctx.ui(move |_| view::with(|v| v.mark_offline(id, true)));
+                }
+                ctx.show_progress();
+                if finished && ctx.shared.routes.lock().unwrap().last() == Some(&Route::Downloads) {
+                    ctx.refresh_downloads();
+                }
+            });
+        }
+    }
+
+    fn remove_download(&self, track_id: i32) {
+        let Some(services) = self.services() else {
+            return;
+        };
+        services.downloads.remove(track_id);
+        self.ui(move |_| view::with(|v| v.mark_offline(track_id, false)));
+        self.refresh_downloads();
+    }
+
+    fn clear_downloads(&self) {
+        let Some(services) = self.services() else {
+            return;
+        };
+        let ids: Vec<i32> = services
+            .downloads
+            .list()
+            .iter()
+            .map(|d| d.track.id)
+            .collect();
+        services.downloads.clear();
+        self.ui(move |_| {
+            view::with(|v| {
+                for id in ids {
+                    v.mark_offline(id, false);
+                }
+            });
+        });
+        self.refresh_downloads();
     }
 
     // ── Wiring ──────────────────────────────────────────────────────────────
@@ -1039,6 +1188,7 @@ impl Ctx {
             "artists" => ctx.go_top(Route::Artists),
             "search" => ctx.go_top(Route::Search),
             "playlists" => ctx.go_top(Route::Playlists),
+            "downloads" => ctx.go_top(Route::Downloads),
             "album-artist" => {
                 let artist = *ctx.shared.album_artist.lock().unwrap();
                 if let Some(id) = artist {
@@ -1097,6 +1247,8 @@ impl Ctx {
         app.on_rename_playlist(move |name| ctx.rename_playlist(&name));
         let ctx = self.clone();
         app.on_delete_playlist(move || ctx.delete_playlist());
+        let ctx = self.clone();
+        app.on_clear_downloads(move || ctx.clear_downloads());
 
         let playback = ui.global::<Playback>();
         let ctx = self.clone();

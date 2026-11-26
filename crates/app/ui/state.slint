@@ -6,7 +6,7 @@ export { TrackItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem }
 
 export global App {
     // setup | signin | loading | albums | artists | album | artist | search
-    // | playlists | playlist
+    // | playlists | playlist | downloads
     in-out property <string> page: "loading";
     in property <bool> can-go-back;
     // Set while a request for the current page is out.
@@ -37,6 +37,11 @@ export global App {
     in property <PlaylistItem> playlist;
     in property <[TrackItem]> playlist-tracks;
 
+    in property <[TrackItem]> downloads;
+    in property <string> downloads-detail;
+    // "Downloading 3 of 12", or empty when nothing is.
+    in property <string> download-status;
+
     in-out property <string> server-url;
     in property <string> setup-error;
     in property <bool> signing-in;
@@ -65,6 +70,7 @@ export global App {
     callback create-playlist(string);
     callback rename-playlist(string);
     callback delete-playlist();
+    callback clear-downloads();
 }
 
 export global Playback {

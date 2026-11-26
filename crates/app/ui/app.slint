@@ -3,7 +3,7 @@ import { Theme } from "theme.slint";
 import { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem } from "state.slint";
 import { NavItem, IconButton } from "widgets.slint";
 import { TrackItem } from "types.slint";
-import { AlbumsPage, ArtistsPage, AlbumPage, ArtistPage, SearchPage, PlaylistsPage, PlaylistPage, SetupPage, SignInPage } from "pages.slint";
+import { AlbumsPage, ArtistsPage, AlbumPage, ArtistPage, SearchPage, PlaylistsPage, PlaylistPage, DownloadsPage, SetupPage, SignInPage } from "pages.slint";
 import { PlayerBar, QueuePanel, DevicesPanel } from "player.slint";
 
 export { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, TrackItem }
@@ -66,6 +66,12 @@ component Sidebar inherits Rectangle {
             clicked => { App.navigate("playlists"); }
         }
         NavItem {
+            text: "Downloads";
+            icon: @image-url("icons/download.svg");
+            selected: App.page == "downloads";
+            clicked => { App.navigate("downloads"); }
+        }
+        NavItem {
             text: "Search";
             icon: @image-url("icons/search.svg");
             selected: App.page == "search";
@@ -74,14 +80,35 @@ component Sidebar inherits Rectangle {
 
         Rectangle { }
 
+        if App.download-status != "": HorizontalLayout {
+            padding-left: 8px;
+            padding-bottom: 6px;
+            spacing: 8px;
+            Image {
+                source: @image-url("icons/download.svg");
+                width: 14px;
+                colorize: Theme.accent;
+            }
+            Text {
+                text: App.download-status;
+                color: Theme.muted;
+                font-size: Theme.size-small;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
         if App.offline: Rectangle {
             height: 34px;
             border-radius: Theme.radius;
-            background: #ff6b6b1f;
+            background: offline-touch.has-hover ? #ff6b6b33 : #ff6b6b1f;
             Text {
                 text: "Offline: downloads only";
                 color: Theme.danger;
                 font-size: Theme.size-small;
+            }
+            offline-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { App.navigate("downloads"); }
             }
         }
         Text {
@@ -141,6 +168,7 @@ export component AppWindow inherits Window {
                         if App.page == "search": SearchPage { }
                         if App.page == "playlists": PlaylistsPage { }
                         if App.page == "playlist": PlaylistPage { }
+                        if App.page == "downloads": DownloadsPage { }
                     }
                 }
 

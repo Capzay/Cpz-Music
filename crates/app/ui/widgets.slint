@@ -252,6 +252,10 @@ export component TrackRow inherits Rectangle {
                     activated => { root.action("add-to", playlist.id); }
                 }
             }
+            MenuItem {
+                title: root.track.offline ? "Remove download" : "Download";
+                activated => { root.action(root.track.offline ? "remove-download" : "download", ""); }
+            }
             MenuSeparator { }
             MenuItem {
                 title: "Go to album";

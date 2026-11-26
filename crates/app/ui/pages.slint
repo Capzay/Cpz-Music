@@ -258,6 +258,10 @@ component ListMenu inherits ContextMenuArea {
             title: "Add to queue";
             activated => { App.album-action("queue", root.source); }
         }
+        MenuItem {
+            title: "Download";
+            activated => { App.album-action("download", root.source); }
+        }
         Menu {
             title: "Add to playlist";
             MenuItem {
@@ -678,6 +682,65 @@ export component PlaylistPage inherits Rectangle {
         empty: App.playlist.id == "";
         empty-title: "Playlist not found";
         empty-body: "It may have been deleted on another device.";
+    }
+}
+
+export component DownloadsPage inherits Rectangle {
+    property <bool> confirm-clear;
+
+    if App.downloads.length > 0: ScrollView {
+        VerticalLayout {
+            alignment: start;
+            padding: Theme.page-padding;
+            spacing: 20px;
+            VerticalLayout {
+                spacing: 6px;
+                Heading { text: "Downloads"; }
+                Text {
+                    text: App.downloads-detail;
+                    color: Theme.faint;
+                    font-size: Theme.size-small;
+                }
+            }
+            HorizontalLayout {
+                spacing: 12px;
+                alignment: start;
+                ListActions {
+                    enabled: true;
+                    source: "downloads";
+                    can-add: false;
+                }
+                IconButton {
+                    icon: @image-url("icons/trash.svg");
+                    size: 20px;
+                    y: (parent.height - self.height) / 2;
+                    tint: root.confirm-clear ? Theme.danger : (self.has-hover ? Theme.text : Theme.muted);
+                    clicked => {
+                        if root.confirm-clear {
+                            App.clear-downloads();
+                            root.confirm-clear = false;
+                        } else {
+                            root.confirm-clear = true;
+                        }
+                    }
+                }
+                if root.confirm-clear: Text {
+                    text: "Click again to remove every download";
+                    color: Theme.danger;
+                    font-size: Theme.size-small;
+                    vertical-alignment: center;
+                }
+            }
+            TrackList {
+                tracks: App.downloads;
+                source: "downloads";
+                show-album: true;
+            }
+        }
+    }
+    if App.downloads.length == 0: Notice {
+        title: "Nothing downloaded yet";
+        body: "Pick \"Download\" on a song, album or playlist to play it without a connection.";
     }
 }
 

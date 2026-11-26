@@ -32,6 +32,19 @@ pub fn length(seconds: f64) -> String {
     }
 }
 
+/// "340 MB", "1.2 GB".
+pub fn bytes(count: u64) -> String {
+    const MB: f64 = 1024.0 * 1024.0;
+    let mb = count as f64 / MB;
+    if mb >= 1024.0 {
+        format!("{:.1} GB", mb / 1024.0)
+    } else if mb >= 10.0 {
+        format!("{mb:.0} MB")
+    } else {
+        format!("{mb:.1} MB")
+    }
+}
+
 pub fn plural(count: usize, one: &str, many: &str) -> String {
     format!("{count} {}", if count == 1 { one } else { many })
 }
@@ -50,6 +63,7 @@ pub struct View {
     pub search_artists: Rc<VecModel<ArtistItem>>,
     pub playlists: Rc<VecModel<PlaylistItem>>,
     pub playlist_tracks: Rc<VecModel<TrackItem>>,
+    pub downloads: Rc<VecModel<TrackItem>>,
     pub queue: Rc<VecModel<TrackItem>>,
     pub devices: Rc<VecModel<DeviceItem>>,
 
@@ -86,6 +100,7 @@ pub fn install(ui: &AppWindow) {
     app.set_search_artists(ModelRc::from(view.search_artists.clone()));
     app.set_playlists(ModelRc::from(view.playlists.clone()));
     app.set_playlist_tracks(ModelRc::from(view.playlist_tracks.clone()));
+    app.set_downloads(ModelRc::from(view.downloads.clone()));
     let playback = ui.global::<Playback>();
     playback.set_queue(ModelRc::from(view.queue.clone()));
     playback.set_devices(ModelRc::from(view.devices.clone()));
@@ -186,13 +201,27 @@ pub fn track_item(
 }
 
 impl View {
-    fn track_models(&self) -> [&Rc<VecModel<TrackItem>>; 4] {
+    fn track_models(&self) -> [&Rc<VecModel<TrackItem>>; 5] {
         [
             &self.album_tracks,
             &self.artist_tracks,
             &self.search_tracks,
             &self.playlist_tracks,
+            &self.downloads,
         ]
+    }
+
+    /// A track was downloaded or removed: update its tick wherever it is listed.
+    pub fn mark_offline(&mut self, track_id: i32, offline: bool) {
+        for model in self.track_models().into_iter().chain([&self.queue]) {
+            for row in 0..model.row_count() {
+                let mut item = model.row_data(row).expect("row is in range");
+                if item.id == track_id && item.offline != offline {
+                    item.offline = offline;
+                    model.set_row_data(row, item);
+                }
+            }
+        }
     }
 
     /// Moves the "playing" highlight in every list when the track changes.
@@ -356,5 +385,8 @@ mod tests {
         assert_eq!(length(4320.0), "1 hr 12 min");
         assert_eq!(plural(1, "song", "songs"), "1 song");
         assert_eq!(plural(3, "song", "songs"), "3 songs");
+        assert_eq!(bytes(5 * 1024 * 1024 + 300_000), "5.3 MB");
+        assert_eq!(bytes(340 * 1024 * 1024), "340 MB");
+        assert_eq!(bytes(1288 * 1024 * 1024), "1.3 GB");
     }
 }

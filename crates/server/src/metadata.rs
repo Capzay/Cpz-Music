@@ -232,20 +232,20 @@ mod tests {
     #[test]
     fn uses_the_containing_folder_for_the_album() {
         assert_eq!(
-            album("/music/Radiohead/In Rainbows/01 15 Step.flac"),
-            "In Rainbows"
+            album("/music/Artist Two/First Album/01 Cedar.flac"),
+            "First Album"
         );
     }
 
     #[test]
     fn climbs_out_of_a_disc_subfolder() {
         assert_eq!(
-            album("/music/Pink Floyd/The Wall/CD1/01 In the Flesh.flac"),
-            "The Wall"
+            album("/music/Artist One/Second Album/CD1/01 Birch.flac"),
+            "Second Album"
         );
         assert_eq!(
-            album("/music/Pink Floyd/The Wall/CD 2/01 Hey You.flac"),
-            "The Wall"
+            album("/music/Artist One/Second Album/CD 2/01 Amber.flac"),
+            "Second Album"
         );
     }
 
@@ -278,8 +278,8 @@ mod tests {
     #[test]
     fn climbs_past_a_disc_subfolder_for_the_artist() {
         assert_eq!(
-            artist("/music/Pink Floyd/The Wall/CD2/01 Hey You.flac").as_deref(),
-            Some("Pink Floyd")
+            artist("/music/Artist One/Second Album/CD2/01 Amber.flac").as_deref(),
+            Some("Artist One")
         );
     }
 

@@ -49,9 +49,9 @@ async fn the_native_client_reads_and_writes_everything_it_needs() {
     let Some(h) = Harness::start().await else {
         return;
     };
-    write_wav(&h.music.join("Pink Floyd/The Wall/CD1/01 In the Flesh.wav"));
-    write_wav(&h.music.join("Pink Floyd/The Wall/CD2/01 Hey You.wav"));
-    write_wav(&h.music.join("Radiohead/In Rainbows/15 Step.wav"));
+    write_wav(&h.music.join("Artist One/Second Album/CD1/01 Birch.wav"));
+    write_wav(&h.music.join("Artist One/Second Album/CD2/01 Amber.wav"));
+    write_wav(&h.music.join("Artist Two/First Album/Cedar.wav"));
     h.scan().await;
 
     let api = client(&h, None).await;
@@ -61,23 +61,23 @@ async fn the_native_client_reads_and_writes_everything_it_needs() {
     assert_eq!(albums.len(), 2);
     let wall = albums
         .iter()
-        .find(|album| album.title == "The Wall")
+        .find(|album| album.title == "Second Album")
         .unwrap();
     let detail = api.album(wall.id).await.unwrap();
-    assert_eq!(detail.artist.name, "Pink Floyd");
+    assert_eq!(detail.artist.name, "Artist One");
     assert_eq!(detail.tracks.len(), 2);
 
     let artists = api.artists().await.unwrap();
     assert_eq!(artists.len(), 2);
     let floyd = artists
         .iter()
-        .find(|artist| artist.name == "Pink Floyd")
+        .find(|artist| artist.name == "Artist One")
         .unwrap();
     assert_eq!(api.artist(floyd.id).await.unwrap().tracks.len(), 2);
     assert_eq!(api.tracks().await.unwrap().len(), 3);
 
-    let found = api.search("hey you").await.unwrap();
-    assert_eq!(found.tracks[0].title, "01 Hey You");
+    let found = api.search("amber").await.unwrap();
+    assert_eq!(found.tracks[0].title, "01 Amber");
     assert!(api.search("").await.unwrap().tracks.is_empty());
     let track = found.tracks[0].clone();
 

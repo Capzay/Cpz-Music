@@ -20,16 +20,16 @@ macro_rules! harness {
 
 /// Two albums, one split over disc folders, one with a cover beside the tracks.
 async fn library(h: &Harness) {
-    write_wav(&h.music.join("Pink Floyd/The Wall/CD1/01 In the Flesh.wav"));
-    write_wav(&h.music.join("Pink Floyd/The Wall/CD2/01 Hey You.wav"));
-    write_wav(&h.music.join("Radiohead/In Rainbows/15 Step.wav"));
+    write_wav(&h.music.join("Artist One/Second Album/CD1/01 Birch.wav"));
+    write_wav(&h.music.join("Artist One/Second Album/CD2/01 Amber.wav"));
+    write_wav(&h.music.join("Artist Two/First Album/Cedar.wav"));
     std::fs::write(
-        h.music.join("Radiohead/In Rainbows/cover.jpg"),
+        h.music.join("Artist Two/First Album/cover.jpg"),
         b"fake jpeg",
     )
     .unwrap();
     std::fs::write(
-        h.music.join("Radiohead/In Rainbows/notes.txt"),
+        h.music.join("Artist Two/First Album/notes.txt"),
         b"not audio",
     )
     .unwrap();
@@ -117,12 +117,12 @@ async fn scans_the_library_and_serves_it() {
         .map(|a| &a["title"])
         .collect();
     // Both discs folded into one album, named after the folder above them.
-    assert_eq!(titles, [&json!("The Wall"), &json!("In Rainbows")]);
-    assert_eq!(albums["albums"][0]["artist"], "Pink Floyd");
+    assert_eq!(titles, [&json!("Second Album"), &json!("First Album")]);
+    assert_eq!(albums["albums"][0]["artist"], "Artist One");
     assert_eq!(albums["albums"][1]["hasArtwork"], true);
 
     let artists = h.json("/api/library/artists", &cookie).await;
-    assert_eq!(artists["artists"][0]["name"], "Pink Floyd");
+    assert_eq!(artists["artists"][0]["name"], "Artist One");
     assert_eq!(artists["artists"][0]["tracks"], 2);
     assert_eq!(artists["artists"][0]["albums"], 1);
 
@@ -131,7 +131,7 @@ async fn scans_the_library_and_serves_it() {
         .json(&format!("/api/library/albums/{album_id}"), &cookie)
         .await;
     assert_eq!(album["tracks"].as_array().unwrap().len(), 2);
-    assert_eq!(album["artist"]["name"], "Pink Floyd");
+    assert_eq!(album["artist"]["name"], "Artist One");
     assert_eq!(
         h.get("/api/library/albums/999999", &cookie).await.status(),
         404
@@ -141,13 +141,13 @@ async fn scans_the_library_and_serves_it() {
     let artist = h
         .json(&format!("/api/library/artists/{artist_id}"), &cookie)
         .await;
-    assert_eq!(artist["name"], "Radiohead");
+    assert_eq!(artist["name"], "Artist Two");
     assert_eq!(artist["albums"].as_array().unwrap().len(), 1);
 
-    let found = h.json("/api/search?q=hey", &cookie).await;
-    assert_eq!(found["tracks"][0]["title"], "01 Hey You");
-    assert_eq!(found["tracks"][0]["album"]["title"], "The Wall");
-    assert_eq!(found["tracks"][0]["artist"]["name"], "Pink Floyd");
+    let found = h.json("/api/search?q=amb", &cookie).await;
+    assert_eq!(found["tracks"][0]["title"], "01 Amber");
+    assert_eq!(found["tracks"][0]["album"]["title"], "Second Album");
+    assert_eq!(found["tracks"][0]["artist"]["name"], "Artist One");
     assert_eq!(found["tracks"][0]["discNumber"], 1);
 
     // Wildcards in a search box are literal characters.
@@ -171,9 +171,9 @@ async fn streams_with_range_support() {
     let h = harness!();
     library(&h).await;
     let cookie = h.owner_cookie();
-    let id = track_id(&h, &cookie, "Hey You").await;
+    let id = track_id(&h, &cookie, "Amber").await;
     let path = format!("/api/tracks/{id}/stream");
-    let file = std::fs::read(h.music.join("Pink Floyd/The Wall/CD2/01 Hey You.wav")).unwrap();
+    let file = std::fs::read(h.music.join("Artist One/Second Album/CD2/01 Amber.wav")).unwrap();
     let size = file.len();
 
     let whole = h.get(&path, &cookie).await;
@@ -235,7 +235,7 @@ async fn refuses_to_serve_a_row_pointing_outside_the_library() {
     let h = harness!();
     library(&h).await;
     let cookie = h.owner_cookie();
-    let id = track_id(&h, &cookie, "Hey You").await;
+    let id = track_id(&h, &cookie, "Amber").await;
 
     sqlx::query(r#"UPDATE "Track" SET "filePath" = '/etc/passwd' WHERE id = $1"#)
         .bind(id as i32)
@@ -272,7 +272,7 @@ async fn a_rescan_touches_only_what_changed() {
     let h = harness!();
     library(&h).await;
     let cookie = h.owner_cookie();
-    let id = track_id(&h, &cookie, "Hey You").await;
+    let id = track_id(&h, &cookie, "Amber").await;
 
     h.post(
         "/api/stats/listen",
@@ -283,9 +283,9 @@ async fn a_rescan_touches_only_what_changed() {
 
     // Rows survive a rescan with the same ids, so stats and playlists stay attached.
     h.scan().await;
-    assert_eq!(track_id(&h, &cookie, "Hey You").await, id);
+    assert_eq!(track_id(&h, &cookie, "Amber").await, id);
 
-    std::fs::remove_file(h.music.join("Radiohead/In Rainbows/15 Step.wav")).unwrap();
+    std::fs::remove_file(h.music.join("Artist Two/First Album/Cedar.wav")).unwrap();
     h.scan().await;
 
     let tracks = h.json("/api/library/tracks", &cookie).await;
@@ -335,18 +335,18 @@ async fn the_watcher_follows_the_disk() {
     let count = |body: Value| body["tracks"].as_array().unwrap().len();
     let settle = std::time::Duration::from_millis(3000);
 
-    write_wav(&h.music.join("Radiohead/In Rainbows/Nude.wav"));
+    write_wav(&h.music.join("Artist Two/First Album/Dune.wav"));
     tokio::time::sleep(settle).await;
     assert_eq!(count(h.json("/api/library/tracks", &cookie).await), 4);
 
     // A whole album moved away arrives as one event for the directory.
     let elsewhere = h.music.parent().unwrap().join("moved");
-    std::fs::rename(h.music.join("Pink Floyd"), &elsewhere).unwrap();
+    std::fs::rename(h.music.join("Artist One"), &elsewhere).unwrap();
     tokio::time::sleep(settle).await;
     assert_eq!(count(h.json("/api/library/tracks", &cookie).await), 2);
 
     // And moved back, with no per-file event at all.
-    std::fs::rename(&elsewhere, h.music.join("Pink Floyd")).unwrap();
+    std::fs::rename(&elsewhere, h.music.join("Artist One")).unwrap();
     tokio::time::sleep(settle).await;
     assert_eq!(count(h.json("/api/library/tracks", &cookie).await), 4);
 }
@@ -406,8 +406,8 @@ async fn playlists_sync_with_last_write_wins() {
     let h = harness!();
     library(&h).await;
     let cookie = h.owner_cookie();
-    let a = track_id(&h, &cookie, "Hey You").await;
-    let b = track_id(&h, &cookie, "15 Step").await;
+    let a = track_id(&h, &cookie, "Amber").await;
+    let b = track_id(&h, &cookie, "Cedar").await;
 
     let sync = |docs: Value| h.post("/api/playlists/sync", &cookie, json!({ "playlists": docs }));
 
@@ -492,7 +492,7 @@ async fn listens_add_up_and_feed_the_stats() {
     let h = harness!();
     library(&h).await;
     let cookie = h.owner_cookie();
-    let id = track_id(&h, &cookie, "Hey You").await;
+    let id = track_id(&h, &cookie, "Amber").await;
 
     let report = |body: Value| h.post("/api/stats/listen", &cookie, body);
 
@@ -516,8 +516,8 @@ async fn listens_add_up_and_feed_the_stats() {
     assert_eq!(stats["totals"]["listenSecs"], 100 + 21600);
     assert_eq!(stats["totals"]["uniqueTracks"], 1);
     assert_eq!(stats["totals"]["uniqueArtists"], 1);
-    assert_eq!(stats["topTracks"][0]["title"], "01 Hey You");
-    assert_eq!(stats["topArtists"][0]["artistName"], "Pink Floyd");
+    assert_eq!(stats["topTracks"][0]["title"], "01 Amber");
+    assert_eq!(stats["topArtists"][0]["artistName"], "Artist One");
 
     assert_eq!(
         h.json("/api/stats?period=nonsense", &cookie).await["period"],
@@ -603,7 +603,7 @@ async fn a_guest_goes_from_invite_to_kicked() {
     let h = harness!();
     library(&h).await;
     let host = h.owner_cookie();
-    let id = track_id(&h, &host, "Hey You").await;
+    let id = track_id(&h, &host, "Amber").await;
     let stream = format!("/api/tracks/{id}/stream");
 
     let settings = h.json("/api/settings", &host).await;
@@ -676,7 +676,7 @@ async fn a_guest_goes_from_invite_to_kicked() {
     assert_eq!(view["status"], "admitted");
     assert_eq!(view["hostName"], "DJ");
     assert_eq!(view["albums"].as_array().unwrap().len(), 2);
-    assert_eq!(view["albums"][1]["tracks"][0]["title"], "01 Hey You");
+    assert_eq!(view["albums"][1]["tracks"][0]["title"], "01 Amber");
     assert_eq!(view["albums"][1]["tracks"].as_array().unwrap().len(), 2);
 
     assert_eq!(
@@ -787,7 +787,7 @@ async fn ending_a_jam_locks_guests_out() {
     let h = harness!();
     library(&h).await;
     let host = h.owner_cookie();
-    let id = track_id(&h, &host, "Hey You").await;
+    let id = track_id(&h, &host, "Amber").await;
     h.post("/api/jam/start", &host, json!({})).await;
     let guest = join(&h, &invite_url(&h, &host).await).await;
 
@@ -1030,7 +1030,7 @@ async fn native_apps_authenticate_with_a_bearer_token() {
     let token = session["access_token"].as_str().unwrap();
     let search = |auth: String| {
         h.http
-            .get(h.url("/api/search?q=Hey"))
+            .get(h.url("/api/search?q=Amb"))
             .header("authorization", auth)
             .send()
     };
@@ -1039,7 +1039,7 @@ async fn native_apps_authenticate_with_a_bearer_token() {
     assert_eq!(ok.status(), 200);
     assert!(ok.headers().get("set-cookie").is_none());
     let body: Value = ok.json().await.unwrap();
-    assert_eq!(body["tracks"][0]["title"], "01 Hey You");
+    assert_eq!(body["tracks"][0]["title"], "01 Amber");
 
     assert_eq!(
         search("Bearer not-a-token".into()).await.unwrap().status(),

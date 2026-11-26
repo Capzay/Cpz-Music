@@ -2,11 +2,11 @@
 //! answers back onto the screen.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use cpz_core::api::{Api, ApiError, fetch_config};
+use cpz_core::api::{Api, ApiError, ClientRelease, fetch_config};
 use cpz_core::audio::Output;
 use cpz_core::auth::{
     Credentials, LOOPBACK_PORT, Pkce, Session, SupabaseAuth, authorize_url, loopback_redirect,
@@ -19,9 +19,9 @@ use cpz_core::playlists::Playlists;
 use cpz_core::realtime::{Channel, ChannelConfig, Hub, Identity, PLAYER_TOPIC};
 use cpz_core::store::Store;
 use cpz_core::types::{AlbumSummary, ArtistCard, ClientConfig, PlayerTrack};
-use slint::{ComponentHandle, Weak};
+use slint::{ComponentHandle, Image, Weak};
 
-use crate::art::Art;
+use crate::art::{Art, Pixels};
 use crate::view::{
     self, album_item, artist_hit, artist_item, bytes, cover_album, length, playlist_item, plural,
     track_item,
@@ -35,6 +35,8 @@ const SEARCH_DELAY: Duration = Duration::from_millis(250);
 const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(600);
 /// Edits sync straight away; this catches ones made on other devices.
 const PLAYLIST_SYNC_EVERY: Duration = Duration::from_secs(60);
+/// How often to ask the server whether a newer build of the app is out.
+const UPDATE_CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 
 pub struct Paths {
     pub data: PathBuf,
@@ -121,6 +123,10 @@ struct Shared {
     /// fetch two songs at a time.
     download_slots: Arc<tokio::sync::Semaphore>,
     progress: Mutex<Progress>,
+    /// A newer build the server offered, until it is installed.
+    update: Mutex<Option<ClientRelease>>,
+    /// Installed: start the new build once this one has closed.
+    restart: AtomicBool,
 }
 
 /// Downloads asked for since the last batch finished.
@@ -221,6 +227,8 @@ impl Ctx {
                 sign_in: Mutex::new(None),
                 download_slots: Arc::new(tokio::sync::Semaphore::new(2)),
                 progress: Mutex::new(Progress::default()),
+                update: Mutex::new(None),
+                restart: AtomicBool::new(false),
             }),
         }
     }
@@ -243,6 +251,10 @@ impl Ctx {
         if let Some(services) = self.services() {
             services.hub.send(command);
         }
+    }
+
+    pub fn restart_requested(&self) -> bool {
+        self.shared.restart.load(Ordering::Relaxed)
     }
 
     pub fn shutdown(&self) {
@@ -471,6 +483,7 @@ impl Ctx {
         tokio::spawn(async move { listens.flush(&api).await });
 
         self.watch_hub(&services);
+        self.watch_updates(&services);
         self.refresh_playlists();
         let ctx = self.clone();
         tokio::spawn(async move {
@@ -491,6 +504,82 @@ impl Ctx {
         self.ui(move |_| ctx.go_top(Route::Albums));
     }
 
+    // ── Updates ─────────────────────────────────────────────────────────────
+
+    /// Asks the server for a newer build now and every few hours, while these
+    /// services last.
+    fn watch_updates(&self, services: &Arc<Services>) {
+        if !crate::update::enabled() {
+            return;
+        }
+        let ctx = self.clone();
+        let services = services.clone();
+        tokio::spawn(async move {
+            let mut every = tokio::time::interval(UPDATE_CHECK_EVERY);
+            loop {
+                every.tick().await;
+                if !ctx
+                    .services()
+                    .is_some_and(|current| Arc::ptr_eq(&current, &services))
+                {
+                    return;
+                }
+                match crate::update::check(&services.api).await {
+                    Ok(Some(release)) => {
+                        let version = release.version.clone();
+                        *ctx.shared.update.lock().unwrap() = Some(release);
+                        ctx.ui(move |ui| {
+                            let app = ui.global::<App>();
+                            app.set_update_version(version.into());
+                            app.set_update_error("".into());
+                        });
+                    }
+                    Ok(None) => {}
+                    Err(err) => tracing::debug!("update check failed: {err}"),
+                }
+            }
+        });
+    }
+
+    /// Downloads and installs the offered build, then closes the app so
+    /// `main` can start the new one.
+    fn install_update(&self) {
+        let Some(services) = self.services() else {
+            return;
+        };
+        let Some(release) = self.shared.update.lock().unwrap().clone() else {
+            return;
+        };
+        let ctx = self.clone();
+        let scratch = self.shared.paths.cache.clone();
+        self.ui(|ui| {
+            let app = ui.global::<App>();
+            app.set_update_busy(true);
+            app.set_update_error("".into());
+        });
+        tokio::spawn(async move {
+            let _ = tokio::fs::create_dir_all(&scratch).await;
+            match crate::update::install(&services.api, &release, &scratch).await {
+                Ok(()) => {
+                    tracing::info!("updated to {}, restarting", release.version);
+                    ctx.shared.restart.store(true, Ordering::Relaxed);
+                    let _ = slint::invoke_from_event_loop(|| {
+                        let _ = slint::quit_event_loop();
+                    });
+                }
+                Err(err) => {
+                    tracing::warn!("update failed: {err:#}");
+                    let message = format!("{err:#}");
+                    ctx.ui(move |ui| {
+                        let app = ui.global::<App>();
+                        app.set_update_busy(false);
+                        app.set_update_error(message.into());
+                    });
+                }
+            }
+        });
+    }
+
     fn watch_hub(&self, services: &Arc<Services>) {
         let mut changes = services.hub.subscribe();
         let ctx = self.clone();
@@ -505,7 +594,13 @@ impl Ctx {
                             ui,
                             &state,
                             |id| downloads.is_downloaded(id),
-                            |album| ctx2.request_art(&art, album),
+                            |album| {
+                                let pixels = art.get(album);
+                                if pixels.is_none() {
+                                    ctx2.request_art(&art, album);
+                                }
+                                pixels
+                            },
                         );
                     });
                 });
@@ -682,7 +777,10 @@ impl Ctx {
                     let app = ui.global::<App>();
                     app.set_album(album_item(&summary, pixels));
                     app.set_album_detail(detail.join(" · ").into());
-                    view::with(|v| v.album_tracks.set_vec(rows));
+                    view::with(|v| {
+                        v.album_tracks.set_vec(rows);
+                        v.sync_source(ui);
+                    });
                     app.set_busy(false);
                 });
                 if has_artwork {
@@ -718,7 +816,10 @@ impl Ctx {
                     let app = ui.global::<App>();
                     app.set_artist_name(name.into());
                     app.set_artist_detail(detail.into());
-                    view::with(|v| v.artist_tracks.set_vec(rows));
+                    view::with(|v| {
+                        v.artist_tracks.set_vec(rows);
+                        v.sync_source(ui);
+                    });
                     app.set_busy(false);
                 });
                 self.show_albums(&services, artist.albums, generation, AlbumList::Artist);
@@ -912,17 +1013,27 @@ impl Ctx {
             .map(|doc| {
                 let tracks = self.track_rows(&services, &doc.tracks, false);
                 let pixels = cover_album(&doc).and_then(|album| art.get(album));
-                (doc, tracks, pixels)
+                // Each song's own album cover, beside it in the list.
+                let covers: Vec<Option<Pixels>> =
+                    doc.tracks.iter().map(|t| art.get(t.album.id)).collect();
+                (doc, tracks, pixels, covers)
             });
         self.shared.lists.lock().unwrap().playlist = open
             .as_ref()
-            .map(|(doc, _, _)| doc.tracks.clone())
+            .map(|(doc, _, _, _)| doc.tracks.clone())
             .unwrap_or_default();
-        let wanted: Vec<i32> = docs
-            .iter()
-            .filter_map(cover_album)
-            .filter(|album| art.get(*album).is_none())
-            .collect();
+        let mut wanted: Vec<i32> = docs.iter().filter_map(cover_album).collect();
+        if let Some((doc, ..)) = &open {
+            wanted.extend(
+                doc.tracks
+                    .iter()
+                    .filter(|t| t.album.has_artwork)
+                    .map(|t| t.album.id),
+            );
+        }
+        wanted.sort_unstable();
+        wanted.dedup();
+        wanted.retain(|album| art.get(*album).is_none());
 
         self.ui(move |ui| {
             let app = ui.global::<App>();
@@ -932,13 +1043,25 @@ impl Ctx {
                 .collect();
             view::with(|v| v.playlists.set_vec(items));
             match open {
-                Some((doc, tracks, pixels)) => {
+                Some((doc, tracks, pixels, covers)) => {
                     app.set_playlist(playlist_item(&doc, true, pixels));
-                    view::with(|v| v.playlist_tracks.set_vec(tracks));
+                    let covers: Vec<Image> = covers
+                        .into_iter()
+                        .map(|p| p.map(Image::from_rgb8).unwrap_or_default())
+                        .collect();
+                    view::with(|v| {
+                        v.playlist_covers.set_vec(covers);
+                        v.playlist_tracks.set_vec(tracks);
+                        v.sync_source(ui);
+                    });
                 }
                 None => {
                     app.set_playlist(PlaylistItem::default());
-                    view::with(|v| v.playlist_tracks.set_vec(Vec::new()));
+                    view::with(|v| {
+                        v.playlist_covers.set_vec(Vec::new());
+                        v.playlist_tracks.set_vec(Vec::new());
+                        v.sync_source(ui);
+                    });
                 }
             }
         });
@@ -1089,7 +1212,10 @@ impl Ctx {
         self.shared.lists.lock().unwrap().downloads = tracks;
         self.ui(move |ui| {
             ui.global::<App>().set_downloads_detail(detail.into());
-            view::with(|v| v.downloads.set_vec(rows));
+            view::with(|v| {
+                v.downloads.set_vec(rows);
+                v.sync_source(ui);
+            });
         });
     }
 
@@ -1218,6 +1344,9 @@ impl Ctx {
         app.on_cancel_sign_in(move || ctx.cancel_sign_in());
         let ctx = self.clone();
         app.on_sign_out(move || ctx.sign_out());
+        let ctx = self.clone();
+        app.on_install_update(move || ctx.install_update());
+        app.set_version(crate::update::VERSION.into());
         let ctx = self.clone();
         app.on_retry(move || ctx.retry());
         let ctx = self.clone();

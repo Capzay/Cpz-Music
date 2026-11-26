@@ -41,6 +41,13 @@ impl ApiError {
 
 pub type ApiResult<T> = Result<T, ApiError>;
 
+/// The newest desktop build the server holds for a platform.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct ClientRelease {
+    pub version: String,
+    pub sha256: String,
+}
+
 /// The public settings a server hands out before anyone signs in.
 pub async fn fetch_config(http: &reqwest::Client, server: &str) -> ApiResult<ClientConfig> {
     let response = http
@@ -241,9 +248,29 @@ impl Api {
     /// connection never leaves a truncated file that looks downloaded.
     /// Returns the size in bytes.
     pub async fn download(&self, track_id: i32, dest: &Path) -> ApiResult<u64> {
-        let request = self
-            .request(Method::GET, &format!("/api/tracks/{track_id}/stream"))
-            .await?;
+        self.download_to(&format!("/api/tracks/{track_id}/stream"), dest)
+            .await
+    }
+
+    /// The newest desktop build for `platform` (such as `linux-x86_64`), or
+    /// `None` when the server has none.
+    pub async fn latest_client(&self, platform: &str) -> ApiResult<Option<ClientRelease>> {
+        match self.get(&format!("/api/client/latest/{platform}")).await {
+            Ok(release) => Ok(Some(release)),
+            Err(ApiError::Status(StatusCode::NOT_FOUND)) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub async fn download_client(&self, platform: &str, dest: &Path) -> ApiResult<u64> {
+        self.download_to(&format!("/api/client/download/{platform}"), dest)
+            .await
+    }
+
+    /// Streams a GET into `dest`, through a `.part` file so a cut-off
+    /// download never looks finished.
+    async fn download_to(&self, path: &str, dest: &Path) -> ApiResult<u64> {
+        let request = self.request(Method::GET, path).await?;
         let response = Self::send(request).await?;
 
         if let Some(dir) = dest.parent() {

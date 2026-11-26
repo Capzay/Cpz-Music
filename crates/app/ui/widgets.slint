@@ -71,7 +71,10 @@ export component PrimaryButton inherits Rectangle {
     callback clicked;
 
     height: 42px;
+    // As wide as its label, not as wide as the row it sits in.
     min-width: label.preferred-width + (root.has-icon ? 60px : 40px);
+    preferred-width: self.min-width;
+    horizontal-stretch: 0;
     border-radius: 21px;
     background: !enabled || busy ? Theme.raised : (touch.has-hover ? Theme.accent-hover : Theme.accent);
 
@@ -207,8 +210,8 @@ export component NavItem inherits Rectangle {
     }
 }
 
-// One song in a list. Double-click (or tap) plays it; right-click, a long
-// press or the "more" button opens what else can be done with it.
+// One song in a list. A click or tap plays it; right-click, a long press or
+// the "more" button opens what else can be done with it.
 export component TrackRow inherits Rectangle {
     in property <TrackItem> track;
     in property <bool> show-album;
@@ -216,6 +219,11 @@ export component TrackRow inherits Rectangle {
     in property <bool> unavailable;
     // In a playlist, the row can also be moved and removed.
     in property <bool> in-playlist;
+    // Leave the artist out of the second line, as on an artist's own page.
+    in property <bool> hide-artist;
+    // A small album cover after the number, for lists that mix albums.
+    in property <bool> show-cover;
+    in property <image> cover;
     in property <bool> first;
     in property <bool> last;
     in property <[PlaylistItem]> playlists;
@@ -223,7 +231,7 @@ export component TrackRow inherits Rectangle {
     // What was picked from the menu, and for "add-to" the playlist's id.
     callback action(string, string);
 
-    height: 48px;
+    height: root.show-cover ? 58px : 48px;
     border-radius: 6px;
     background: (touch.has-hover || more.has-hover) && !unavailable ? Theme.hover : transparent;
     opacity: unavailable ? 0.4 : 1;
@@ -285,13 +293,7 @@ export component TrackRow inherits Rectangle {
         touch := TouchArea {
             enabled: !root.unavailable;
             mouse-cursor: pointer;
-            double-clicked => { root.play(); }
-            // A single tap is a play on touch screens, which have no hover.
-            pointer-event(event) => {
-                if event.kind == PointerEventKind.up && event.touch-finger-id != 0 {
-                    root.play();
-                }
-            }
+            clicked => { root.play(); }
         }
 
         HorizontalLayout {
@@ -307,6 +309,13 @@ export component TrackRow inherits Rectangle {
                 horizontal-alignment: right;
                 vertical-alignment: center;
             }
+            if root.show-cover: Cover {
+                art: root.cover;
+                width: 42px;
+                height: 42px;
+                corner: 4px;
+                y: (parent.height - self.height) / 2;
+            }
             VerticalLayout {
                 alignment: center;
                 spacing: 2px;
@@ -319,7 +328,7 @@ export component TrackRow inherits Rectangle {
                     overflow: elide;
                 }
                 Text {
-                    text: root.show-album ? root.track.artist + "  ·  " + root.track.album : root.track.artist;
+                    text: root.hide-artist ? root.track.album : (root.show-album ? root.track.artist + "  ·  " + root.track.album : root.track.artist);
                     color: Theme.muted;
                     font-size: Theme.size-small;
                     overflow: elide;

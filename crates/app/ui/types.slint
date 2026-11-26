@@ -15,6 +15,16 @@ export struct TrackItem {
     offline: bool,
 }
 
+// A row in the queue: the song and its album's cover. Kept apart from
+// `TrackItem` because an image cannot cross threads and page rows are built
+// in the background.
+export struct QueueItem {
+    track: TrackItem,
+    art: image,
+    // Its place in the queue itself, which is not its row when shuffled.
+    index: int,
+}
+
 export struct AlbumItem {
     id: int,
     title: string,

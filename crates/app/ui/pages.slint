@@ -1,16 +1,23 @@
 import { ScrollView, Spinner } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { App, AlbumItem, ArtistItem, PlaylistItem } from "state.slint";
+import { App, Playback, AlbumItem, ArtistItem, PlaylistItem } from "state.slint";
 import { Cover, TrackRow, TrackItem, PlayButton, PrimaryButton, IconButton, Notice, TextField } from "widgets.slint";
 
-component AlbumCard inherits Rectangle {
-    in property <AlbumItem> album;
+// A cover with a title and a line under it, for albums and playlists.
+component Tile inherits Rectangle {
+    in property <image> art;
+    in property <string> title;
+    in property <string> subtitle;
     callback clicked;
 
+    border-radius: Theme.radius + 4px;
+    background: touch.has-hover ? Theme.hover : transparent;
+
     VerticalLayout {
+        padding: 10px;
         spacing: 10px;
         Cover {
-            art: root.album.art;
+            art: root.art;
             height: self.width;
             corner: Theme.radius;
             // A lift on hover, so the grid feels pressable.
@@ -20,14 +27,14 @@ component AlbumCard inherits Rectangle {
         VerticalLayout {
             spacing: 2px;
             Text {
-                text: root.album.title;
+                text: root.title;
                 color: Theme.text;
                 font-size: Theme.size-body;
                 font-weight: 600;
                 overflow: elide;
             }
             Text {
-                text: root.album.year == "" ? root.album.artist : root.album.artist + " · " + root.album.year;
+                text: root.subtitle;
                 color: Theme.muted;
                 font-size: Theme.size-small;
                 overflow: elide;
@@ -41,29 +48,57 @@ component AlbumCard inherits Rectangle {
     }
 }
 
-// Albums in as many columns as fit. Its height follows from `avail`, the width
+// Tiles in as many columns as fit. Its height follows from `avail`, the width
 // it is given, so it can sit in a scrolling layout without a binding loop.
-component AlbumTiles inherits Rectangle {
-    in property <[AlbumItem]> albums;
+// Tiles carry their own padding, so the grid bleeds into the page's padding
+// by that much (the tiles sit outside its box on both sides) so the covers
+// still line up with the heading.
+component TileGrid inherits Rectangle {
+    in property <int> count;
     in property <length> avail;
-    callback open(int);
+    property <length> bleed: 10px;
+    property <length> min-cell: 170px;
+    out property <int> cols: max(1, Math.floor((root.avail + 2 * root.bleed) / root.min-cell));
+    out property <length> cell: (root.avail + 2 * root.bleed) / root.cols;
+    // Cover, the two lines of text and the tile's padding.
+    out property <length> cell-h: root.cell + 46px;
 
-    property <length> gap: 22px;
-    property <length> min-cell: 160px;
-    property <int> cols: max(1, Math.floor((root.avail + root.gap) / (root.min-cell + root.gap)));
-    property <length> cell: (root.avail - (root.cols - 1) * root.gap) / root.cols;
-    property <length> cell-h: root.cell + 48px;
-
+    out property <length> left: -root.bleed;
     width: root.avail;
-    height: max(0px, Math.ceil(root.albums.length / root.cols) * (root.cell-h + root.gap) - root.gap);
+    height: Math.ceil(root.count / root.cols) * root.cell-h;
+}
 
-    for album[i] in root.albums: AlbumCard {
-        x: Math.mod(i, root.cols) * (root.cell + root.gap);
-        y: Math.floor(i / root.cols) * (root.cell-h + root.gap);
+component AlbumTiles inherits TileGrid {
+    in property <[AlbumItem]> albums;
+    callback open(int);
+    count: root.albums.length;
+
+    for album[i] in root.albums: Tile {
+        x: root.left + Math.mod(i, root.cols) * root.cell;
+        y: Math.floor(i / root.cols) * root.cell-h;
         width: root.cell;
         height: root.cell-h;
-        album: album;
+        art: album.art;
+        title: album.title;
+        subtitle: album.year == "" ? album.artist : album.artist + " · " + album.year;
         clicked => { root.open(album.id); }
+    }
+}
+
+component PlaylistTiles inherits TileGrid {
+    in property <[PlaylistItem]> playlists;
+    callback open(string);
+    count: root.playlists.length;
+
+    for playlist[i] in root.playlists: Tile {
+        x: root.left + Math.mod(i, root.cols) * root.cell;
+        y: Math.floor(i / root.cols) * root.cell-h;
+        width: root.cell;
+        height: root.cell-h;
+        art: playlist.art;
+        title: playlist.name;
+        subtitle: playlist.detail;
+        clicked => { root.open(playlist.id); }
     }
 }
 
@@ -75,8 +110,43 @@ component Heading inherits Text {
 
 component SubHeading inherits Text {
     color: Theme.text;
-    font-size: Theme.size-title + 3px;
+    font-size: Theme.size-title + 5px;
     font-weight: 700;
+}
+
+// A page's title, with room on the right for its buttons.
+component PageHeader inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> detail;
+    spacing: 12px;
+    padding-bottom: 6px;
+    VerticalLayout {
+        alignment: center;
+        spacing: 4px;
+        horizontal-stretch: 1;
+        Heading { text: root.title; }
+        if root.detail != "": Text {
+            text: root.detail;
+            color: Theme.muted;
+            font-size: Theme.size-small;
+        }
+    }
+    @children
+}
+
+// The small capitals above a hero title: ALBUM, ARTIST, PLAYLIST.
+component Kicker inherits Text {
+    color: Theme.muted;
+    font-size: Theme.size-small;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+}
+
+component HeroTitle inherits Text {
+    color: Theme.text;
+    font-size: Theme.size-hero;
+    font-weight: 800;
+    wrap: word-wrap;
 }
 
 // Loading, failed or empty, else the page itself.
@@ -116,8 +186,11 @@ export component AlbumsPage inherits Rectangle {
         VerticalLayout {
             alignment: start;
             padding: Theme.page-padding;
-            spacing: 22px;
-            Heading { text: "Albums"; }
+            spacing: 12px;
+            PageHeader {
+                title: "Albums";
+                detail: App.albums.length + (App.albums.length == 1 ? " album" : " albums");
+            }
             AlbumTiles {
                 albums: App.albums;
                 avail: root.width - 2 * Theme.page-padding;
@@ -184,9 +257,12 @@ export component ArtistsPage inherits Rectangle {
         VerticalLayout {
             alignment: start;
             padding: Theme.page-padding;
-            spacing: 4px;
-            Heading { text: "Artists"; }
-            Rectangle { height: 14px; }
+            spacing: 2px;
+            PageHeader {
+                title: "Artists";
+                detail: App.artists.length + (App.artists.length == 1 ? " artist" : " artists");
+            }
+            Rectangle { height: 10px; }
             for artist in App.artists: ArtistRow {
                 artist: artist;
                 clicked => { App.open-artist(artist.id); }
@@ -205,10 +281,18 @@ component TrackList inherits VerticalLayout {
     in property <string> source;
     in property <bool> show-album;
     in property <bool> in-playlist;
+    // On an artist's page every row would repeat their name.
+    in property <bool> hide-artist;
+    // Album covers row for row with `tracks`, where songs come from many albums.
+    in property <[image]> covers;
+    in property <bool> show-covers;
     spacing: 0;
     for track[i] in root.tracks: TrackRow {
         track: track;
+        show-cover: root.show-covers;
+        cover: root.covers[i];
         show-album: root.show-album;
+        hide-artist: root.hide-artist;
         unavailable: App.offline && !track.offline;
         in-playlist: root.in-playlist;
         first: i == 0;
@@ -231,7 +315,14 @@ component ListActions inherits HorizontalLayout {
     PlayButton {
         size: 52px;
         enabled: root.enabled;
-        clicked => { App.play-list(root.source, 0); }
+        playing: App.playing-source == root.source && Playback.playing;
+        clicked => {
+            if App.playing-source == root.source {
+                Playback.toggle();
+            } else {
+                App.play-list(root.source, 0);
+            }
+        }
     }
     IconButton {
         icon: @image-url("icons/shuffle.svg");
@@ -297,20 +388,8 @@ export component AlbumPage inherits Rectangle {
                 VerticalLayout {
                     alignment: end;
                     spacing: 8px;
-                    Text {
-                        text: "ALBUM";
-                        color: Theme.muted;
-                        font-size: Theme.size-small;
-                        font-weight: 600;
-                        letter-spacing: 1.2px;
-                    }
-                    Text {
-                        text: App.album.title;
-                        color: Theme.text;
-                        font-size: Theme.size-hero;
-                        font-weight: 800;
-                        wrap: word-wrap;
-                    }
+                    Kicker { text: "ALBUM"; }
+                    HeroTitle { text: App.album.title; }
                     artist-link := Text {
                         text: App.album.artist;
                         color: artist-touch.has-hover ? Theme.text : Theme.muted;
@@ -356,43 +435,37 @@ export component ArtistPage inherits Rectangle {
         VerticalLayout {
             alignment: start;
             padding: Theme.page-padding;
-            spacing: 20px;
+            spacing: 14px;
 
-            VerticalLayout {
-                spacing: 6px;
-                Text {
-                    text: "ARTIST";
-                    color: Theme.muted;
-                    font-size: Theme.size-small;
-                    font-weight: 600;
-                    letter-spacing: 1.2px;
+            HorizontalLayout {
+                spacing: 28px;
+                padding-bottom: 14px;
+                // The first album's cover, in a circle, until artists have photos.
+                Cover {
+                    art: App.artist-albums[0].art;
+                    width: min(200px, max(110px, root.width * 0.2));
+                    height: self.width;
+                    corner: self.width / 2;
                 }
-                Text {
-                    text: App.artist-name;
-                    color: Theme.text;
-                    font-size: Theme.size-hero;
-                    font-weight: 800;
-                    wrap: word-wrap;
+                VerticalLayout {
+                    alignment: end;
+                    spacing: 8px;
+                    Kicker { text: "ARTIST"; }
+                    HeroTitle { text: App.artist-name; }
+                    Text {
+                        text: App.artist-detail;
+                        color: Theme.faint;
+                        font-size: Theme.size-small;
+                    }
+                    Rectangle { height: 8px; }
+                    ListActions {
+                        enabled: App.artist-tracks.length > 0;
+                        source: "artist";
+                        more-clicked(x, y) => {
+                            artist-menu.show({ x: x - artist-menu.absolute-position.x, y: y - artist-menu.absolute-position.y });
+                        }
+                    }
                 }
-                Text {
-                    text: App.artist-detail;
-                    color: Theme.faint;
-                    font-size: Theme.size-small;
-                }
-            }
-            ListActions {
-                enabled: App.artist-tracks.length > 0;
-                source: "artist";
-                more-clicked(x, y) => {
-                    artist-menu.show({ x: x - artist-menu.absolute-position.x, y: y - artist-menu.absolute-position.y });
-                }
-            }
-
-            if App.artist-albums.length > 0: SubHeading { text: "Albums"; }
-            if App.artist-albums.length > 0: AlbumTiles {
-                albums: App.artist-albums;
-                avail: root.width - 2 * Theme.page-padding;
-                open(id) => { App.open-album(id); }
             }
 
             SubHeading { text: "Songs"; }
@@ -400,6 +473,15 @@ export component ArtistPage inherits Rectangle {
                 tracks: App.artist-tracks;
                 source: "artist";
                 show-album: true;
+                hide-artist: true;
+            }
+
+            if App.artist-albums.length > 0: Rectangle { height: 14px; }
+            if App.artist-albums.length > 0: SubHeading { text: "Albums"; }
+            if App.artist-albums.length > 0: AlbumTiles {
+                albums: App.artist-albums;
+                avail: root.width - 2 * Theme.page-padding;
+                open(id) => { App.open-album(id); }
             }
         }
     }
@@ -411,12 +493,14 @@ export component ArtistPage inherits Rectangle {
 }
 
 export component SearchPage inherits Rectangle {
+    property <bool> has-results: App.search-tracks.length + App.search-albums.length + App.search-artists.length > 0;
+
     VerticalLayout {
         padding: Theme.page-padding;
         padding-bottom: 0;
-        spacing: 20px;
+        spacing: 16px;
 
-        Heading { text: "Search"; }
+        PageHeader { title: "Search"; }
         search-box := TextField {
             placeholder: "Songs, albums and artists";
             text <=> App.search-text;
@@ -425,20 +509,27 @@ export component SearchPage inherits Rectangle {
             init => { self.focus-input(); }
         }
 
-        if App.search-text == "": Notice {
-            title: "Find something to play";
-            body: "Type to search the whole library.";
-        }
-        if App.search-text != "" && App.search-tracks.length == 0 && App.search-albums.length == 0 && App.search-artists.length == 0 && !App.busy: Notice {
-            title: "Nothing found";
-            body: "No song, album or artist matches \"" + App.search-text + "\".";
+        if !root.has-results: VerticalLayout {
+            alignment: start;
+            padding-top: 64px;
+            vertical-stretch: 1;
+            if App.search-text == "": Notice {
+                title: "Find something to play";
+                body: "Type to search the whole library.";
+            }
+            if App.search-text != "" && !App.busy: Notice {
+                title: "Nothing found";
+                body: "No song, album or artist matches \"" + App.search-text + "\".";
+            }
         }
 
-        if App.search-tracks.length + App.search-albums.length + App.search-artists.length > 0: ScrollView {
+        if root.has-results: ScrollView {
+            vertical-stretch: 1;
             VerticalLayout {
                 alignment: start;
+                padding-top: 8px;
                 padding-bottom: Theme.page-padding;
-                spacing: 18px;
+                spacing: 14px;
                 if App.search-tracks.length > 0: SubHeading { text: "Songs"; }
                 if App.search-tracks.length > 0: TrackList {
                     tracks: App.search-tracks;
@@ -461,47 +552,6 @@ export component SearchPage inherits Rectangle {
     }
 }
 
-component PlaylistRow inherits Rectangle {
-    in property <PlaylistItem> playlist;
-    callback clicked;
-
-    height: 72px;
-    border-radius: Theme.radius;
-    background: touch.has-hover ? Theme.hover : transparent;
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-
-    HorizontalLayout {
-        padding-left: 10px;
-        spacing: 14px;
-        Cover {
-            art: root.playlist.art;
-            width: 52px;
-            height: 52px;
-            y: (parent.height - self.height) / 2;
-        }
-        VerticalLayout {
-            alignment: center;
-            spacing: 2px;
-            Text {
-                text: root.playlist.name;
-                color: Theme.text;
-                font-size: Theme.size-body;
-                font-weight: 600;
-                overflow: elide;
-            }
-            Text {
-                text: root.playlist.detail;
-                color: Theme.muted;
-                font-size: Theme.size-small;
-            }
-        }
-    }
-}
-
 export component PlaylistsPage inherits Rectangle {
     property <bool> naming;
 
@@ -509,22 +559,25 @@ export component PlaylistsPage inherits Rectangle {
         VerticalLayout {
             alignment: start;
             padding: Theme.page-padding;
-            spacing: 4px;
-            HorizontalLayout {
-                spacing: 12px;
-                Heading { text: "Playlists"; }
-                if !root.naming: PrimaryButton {
-                    text: "New playlist";
-                    icon: @image-url("icons/plus.svg");
-                    has-icon: true;
-                    clicked => { root.naming = true; }
+            spacing: 12px;
+            PageHeader {
+                title: "Playlists";
+                detail: App.playlists.length + (App.playlists.length == 1 ? " playlist" : " playlists");
+                if !root.naming: VerticalLayout {
+                    alignment: center;
+                    PrimaryButton {
+                        text: "New playlist";
+                        icon: @image-url("icons/plus.svg");
+                        has-icon: true;
+                        clicked => { root.naming = true; }
+                    }
                 }
             }
             if root.naming: HorizontalLayout {
-                padding-top: 14px;
                 spacing: 10px;
                 name := TextField {
                     placeholder: "Name your playlist";
+                    max-width: 420px;
                     accepted(text) => {
                         if text != "" {
                             App.create-playlist(text);
@@ -547,11 +600,12 @@ export component PlaylistsPage inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     clicked => { root.naming = false; }
                 }
+                Rectangle { horizontal-stretch: 1; }
             }
-            Rectangle { height: 14px; }
-            for playlist in App.playlists: PlaylistRow {
-                playlist: playlist;
-                clicked => { App.open-playlist(playlist.id); }
+            if App.playlists.length > 0: PlaylistTiles {
+                playlists: App.playlists;
+                avail: root.width - 2 * Theme.page-padding;
+                open(id) => { App.open-playlist(id); }
             }
             if App.playlists.length == 0 && !root.naming: Rectangle {
                 height: 240px;
@@ -587,20 +641,8 @@ export component PlaylistPage inherits Rectangle {
                 VerticalLayout {
                     alignment: end;
                     spacing: 8px;
-                    Text {
-                        text: "PLAYLIST";
-                        color: Theme.muted;
-                        font-size: Theme.size-small;
-                        font-weight: 600;
-                        letter-spacing: 1.2px;
-                    }
-                    if !root.renaming: Text {
-                        text: App.playlist.name;
-                        color: Theme.text;
-                        font-size: Theme.size-hero;
-                        font-weight: 800;
-                        wrap: word-wrap;
-                    }
+                    Kicker { text: "PLAYLIST"; }
+                    if !root.renaming: HeroTitle { text: App.playlist.name; }
                     if root.renaming: HorizontalLayout {
                         spacing: 10px;
                         new-name := TextField {
@@ -675,6 +717,8 @@ export component PlaylistPage inherits Rectangle {
                 source: "playlist";
                 show-album: true;
                 in-playlist: true;
+                covers: App.playlist-covers;
+                show-covers: true;
             }
         }
     }
@@ -693,14 +737,9 @@ export component DownloadsPage inherits Rectangle {
             alignment: start;
             padding: Theme.page-padding;
             spacing: 20px;
-            VerticalLayout {
-                spacing: 6px;
-                Heading { text: "Downloads"; }
-                Text {
-                    text: App.downloads-detail;
-                    color: Theme.faint;
-                    font-size: Theme.size-small;
-                }
+            PageHeader {
+                title: "Downloads";
+                detail: App.downloads-detail;
             }
             HorizontalLayout {
                 spacing: 12px;

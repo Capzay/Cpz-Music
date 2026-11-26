@@ -1,4 +1,5 @@
 mod auth;
+mod client;
 mod jam;
 mod library;
 mod media;
@@ -88,11 +89,13 @@ pub fn router(state: Shared) -> Router {
     // and gzipping a Range response would corrupt the byte offsets it promises.
     let media = Router::new()
         .route("/api/artwork/{album_id}", get(media::artwork))
-        .route("/api/tracks/{id}/stream", get(media::stream));
+        .route("/api/tracks/{id}/stream", get(media::stream))
+        .route("/api/client/download/{platform}", get(client::download));
 
     let api = Router::new()
         .route("/api/health", get(health))
         .route("/api/config", get(client_config))
+        .route("/api/client/latest/{platform}", get(client::latest))
         .route("/api/auth/owner", post(auth::owner))
         .route("/api/search", get(library::search))
         .route("/api/library/tracks", get(library::tracks))

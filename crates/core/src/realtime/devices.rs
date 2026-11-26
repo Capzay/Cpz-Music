@@ -84,6 +84,7 @@ impl SharedState {
             index: self.index,
             shuffle: self.shuffle,
             repeat: self.repeat,
+            order: Vec::new(),
         }
     }
 }

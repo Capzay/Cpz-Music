@@ -2,7 +2,7 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Playback, App, DeviceItem } from "state.slint";
 import { Cover, IconButton, PlayButton, SeekBar } from "widgets.slint";
-import { TrackItem } from "types.slint";
+import { QueueItem } from "types.slint";
 
 component Transport inherits HorizontalLayout {
     in property <length> play-size: 40px;
@@ -224,12 +224,12 @@ component SidePanel inherits Rectangle {
 }
 
 component QueueRow inherits Rectangle {
-    in property <TrackItem> track;
+    in property <QueueItem> item;
     in property <bool> current;
     callback play;
     callback remove;
 
-    height: 52px;
+    height: 56px;
     border-radius: 6px;
     background: current ? Theme.raised : (touch.has-hover ? Theme.hover : transparent);
 
@@ -239,21 +239,29 @@ component QueueRow inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 10px;
+        padding-left: 8px;
         padding-right: 4px;
-        spacing: 8px;
+        spacing: 12px;
+        Cover {
+            art: root.item.art;
+            width: 40px;
+            height: 40px;
+            corner: 4px;
+            y: (parent.height - self.height) / 2;
+        }
         VerticalLayout {
             alignment: center;
             spacing: 2px;
+            horizontal-stretch: 1;
             Text {
-                text: root.track.title;
+                text: root.item.track.title;
                 color: root.current ? Theme.accent : Theme.text;
                 font-size: Theme.size-body;
                 font-weight: root.current ? 600 : 400;
                 overflow: elide;
             }
             Text {
-                text: root.track.artist;
+                text: root.item.track.artist;
                 color: Theme.muted;
                 font-size: Theme.size-small;
                 overflow: elide;
@@ -280,11 +288,12 @@ export component QueuePanel inherits SidePanel {
         vertical-alignment: top;
     }
     if Playback.queue.length > 0: ListView {
-        for track[i] in Playback.queue: QueueRow {
-            track: track;
-            current: i == Playback.queue-index;
-            play => { Playback.jump-to(i); }
-            remove => { Playback.remove(i); }
+        // Rows are in play order, so shuffled queues show what really comes next.
+        for item in Playback.queue: QueueRow {
+            item: item;
+            current: item.index == Playback.queue-index;
+            play => { Playback.jump-to(item.index); }
+            remove => { Playback.remove(item.index); }
         }
     }
 }

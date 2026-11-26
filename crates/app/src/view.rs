@@ -10,7 +10,9 @@ use cpz_core::types::{AlbumSummary, ArtistCard, ArtistHit, PlayerTrack, RepeatMo
 use slint::{ComponentHandle, Image, Model, ModelRc, VecModel};
 
 use crate::art::Pixels;
-use crate::{AlbumItem, App, AppWindow, ArtistItem, DeviceItem, Playback, PlaylistItem, TrackItem};
+use crate::{
+    AlbumItem, App, AppWindow, ArtistItem, DeviceItem, Playback, PlaylistItem, QueueItem, TrackItem,
+};
 
 pub fn time(seconds: f64) -> String {
     let total = seconds.max(0.0).floor() as u64;
@@ -63,11 +65,15 @@ pub struct View {
     pub search_artists: Rc<VecModel<ArtistItem>>,
     pub playlists: Rc<VecModel<PlaylistItem>>,
     pub playlist_tracks: Rc<VecModel<TrackItem>>,
+    /// Each playlist row's album cover, row for row with `playlist_tracks`.
+    pub playlist_covers: Rc<VecModel<Image>>,
     pub downloads: Rc<VecModel<TrackItem>>,
-    pub queue: Rc<VecModel<TrackItem>>,
+    pub queue: Rc<VecModel<QueueItem>>,
     pub devices: Rc<VecModel<DeviceItem>>,
 
     queue_ids: Vec<i32>,
+    /// Queue indices in the order the queue panel lists them.
+    queue_rows: Vec<usize>,
     current: Option<i32>,
     playback_album: Option<i32>,
 }
@@ -100,6 +106,7 @@ pub fn install(ui: &AppWindow) {
     app.set_search_artists(ModelRc::from(view.search_artists.clone()));
     app.set_playlists(ModelRc::from(view.playlists.clone()));
     app.set_playlist_tracks(ModelRc::from(view.playlist_tracks.clone()));
+    app.set_playlist_covers(ModelRc::from(view.playlist_covers.clone()));
     app.set_downloads(ModelRc::from(view.downloads.clone()));
     let playback = ui.global::<Playback>();
     playback.set_queue(ModelRc::from(view.queue.clone()));
@@ -213,7 +220,7 @@ impl View {
 
     /// A track was downloaded or removed: update its tick wherever it is listed.
     pub fn mark_offline(&mut self, track_id: i32, offline: bool) {
-        for model in self.track_models().into_iter().chain([&self.queue]) {
+        for model in self.track_models() {
             for row in 0..model.row_count() {
                 let mut item = model.row_data(row).expect("row is in range");
                 if item.id == track_id && item.offline != offline {
@@ -221,6 +228,36 @@ impl View {
                     model.set_row_data(row, item);
                 }
             }
+        }
+        for row in 0..self.queue.row_count() {
+            let mut item = self.queue.row_data(row).expect("row is in range");
+            if item.track.id == track_id && item.track.offline != offline {
+                item.track.offline = offline;
+                self.queue.set_row_data(row, item);
+            }
+        }
+    }
+
+    /// Which page's list is the queue, so its play button can show pause and
+    /// pause it. Call after the queue or a page's list changes.
+    pub fn sync_source(&self, ui: &AppWindow) {
+        let same = |model: &Rc<VecModel<TrackItem>>| {
+            !self.queue_ids.is_empty()
+                && model.row_count() == self.queue_ids.len()
+                && model.iter().zip(&self.queue_ids).all(|(t, id)| t.id == *id)
+        };
+        let source = [
+            ("album", &self.album_tracks),
+            ("artist", &self.artist_tracks),
+            ("playlist", &self.playlist_tracks),
+            ("downloads", &self.downloads),
+        ]
+        .into_iter()
+        .find(|(_, model)| same(model))
+        .map_or("", |(name, _)| name);
+        let app = ui.global::<App>();
+        if app.get_playing_source() != source {
+            app.set_playing_source(source.into());
         }
     }
 
@@ -261,6 +298,22 @@ impl View {
                 self.playlists.set_row_data(row, item);
             }
         }
+        for row in 0..self.playlist_covers.row_count() {
+            let on_album = self
+                .playlist_tracks
+                .row_data(row)
+                .is_some_and(|t| t.album_id == album_id);
+            if on_album {
+                self.playlist_covers.set_row_data(row, image.clone());
+            }
+        }
+        for row in 0..self.queue.row_count() {
+            let mut item = self.queue.row_data(row).expect("row is in range");
+            if item.track.album_id == album_id {
+                item.art = image.clone();
+                self.queue.set_row_data(row, item);
+            }
+        }
         let app = ui.global::<App>();
         let mut album = app.get_album();
         if album.id == album_id {
@@ -284,7 +337,9 @@ impl View {
         ui: &AppWindow,
         state: &HubState,
         offline: impl Fn(i32) -> bool,
-        art: impl FnOnce(i32),
+        // The cover if it is already in memory; otherwise it is fetched and
+        // arrives through `art` below.
+        art: impl Fn(i32) -> Option<Pixels>,
     ) {
         let playback = ui.global::<Playback>();
         let player = &state.player;
@@ -298,10 +353,12 @@ impl View {
             playback.set_album_id(track.album.id);
             if self.playback_album != Some(track.album.id) {
                 self.playback_album = Some(track.album.id);
-                playback.set_art(Image::default());
-                if track.album.has_artwork {
-                    art(track.album.id);
-                }
+                let pixels = track
+                    .album
+                    .has_artwork
+                    .then(|| art(track.album.id))
+                    .flatten();
+                playback.set_art(pixels.map(Image::from_rgb8).unwrap_or_default());
             }
         }
         let duration = player
@@ -326,16 +383,40 @@ impl View {
         playback.set_queue_index(player.queue.index as i32);
 
         let ids: Vec<i32> = player.queue.tracks.iter().map(|t| t.id).collect();
-        if ids != self.queue_ids {
-            let items: Vec<TrackItem> = player
-                .queue
-                .tracks
+        // What is playing and what comes after it, in play order: the shuffled
+        // order when this device is the one playing (a remote has no way to know
+        // the other device's order, so it lists them as queued). Songs already
+        // played are left out.
+        let tracks = &player.queue.tracks;
+        let index = player.queue.index;
+        let order = &player.queue.order;
+        let rows: Vec<usize> = if state.is_active && order.len() == tracks.len() {
+            let pos = order.iter().position(|&i| i == index).unwrap_or(0);
+            order[pos..].to_vec()
+        } else {
+            (index.min(tracks.len())..tracks.len()).collect()
+        };
+        if ids != self.queue_ids || rows != self.queue_rows {
+            let items: Vec<QueueItem> = rows
                 .iter()
                 .enumerate()
-                .map(|(i, t)| track_item(t, i, false, None, offline(t.id)))
+                .map(|(row, &i)| (row, i, &tracks[i]))
+                .map(|(row, i, t)| QueueItem {
+                    index: i as i32,
+                    track: track_item(t, row, false, None, offline(t.id)),
+                    art: t
+                        .album
+                        .has_artwork
+                        .then(|| art(t.album.id))
+                        .flatten()
+                        .map(Image::from_rgb8)
+                        .unwrap_or_default(),
+                })
                 .collect();
             self.queue.set_vec(items);
             self.queue_ids = ids;
+            self.queue_rows = rows;
+            self.sync_source(ui);
         }
         self.highlight(current.map(|t| t.id));
 

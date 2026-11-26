@@ -1,8 +1,8 @@
 // The UI's state, filled in from Rust. Screens read these and call back.
 
-import { TrackItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem } from "types.slint";
+import { TrackItem, QueueItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem } from "types.slint";
 
-export { TrackItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem }
+export { TrackItem, QueueItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem }
 
 export global App {
     // setup | signin | loading | albums | artists | album | artist | search
@@ -15,6 +15,9 @@ export global App {
     in property <string> error;
     // The server could not be reached; downloads still play.
     in property <bool> offline;
+    // The page list the queue was played from ("album", "artist", "playlist",
+    // "downloads"), or empty. Its play button then pauses instead.
+    in property <string> playing-source;
 
     in property <[AlbumItem]> albums;
     in property <[ArtistItem]> artists;
@@ -36,11 +39,19 @@ export global App {
     in property <[PlaylistItem]> playlists;
     in property <PlaylistItem> playlist;
     in property <[TrackItem]> playlist-tracks;
+    // Each song's album cover, row for row with `playlist-tracks`.
+    in property <[image]> playlist-covers;
 
     in property <[TrackItem]> downloads;
     in property <string> downloads-detail;
     // "Downloading 3 of 12", or empty when nothing is.
     in property <string> download-status;
+
+    // This build's version, and a newer one the server has, or empty.
+    in property <string> version;
+    in property <string> update-version;
+    in property <bool> update-busy;
+    in property <string> update-error;
 
     in-out property <string> server-url;
     in property <string> setup-error;
@@ -71,6 +82,8 @@ export global App {
     callback rename-playlist(string);
     callback delete-playlist();
     callback clear-downloads();
+    // Downloads the newer build, swaps it in and restarts.
+    callback install-update();
 }
 
 export global Playback {
@@ -95,7 +108,7 @@ export global Playback {
     in property <int> repeat;
     in property <float> volume: 1;
 
-    in property <[TrackItem]> queue;
+    in property <[QueueItem]> queue;
     in property <int> queue-index;
 
     in property <[DeviceItem]> devices;

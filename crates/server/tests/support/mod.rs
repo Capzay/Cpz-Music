@@ -229,6 +229,7 @@ impl Harness {
             owner_github_id: Some(OWNER.into()),
             music_dir: Some(music.clone()),
             artwork_dir: root.join("artwork"),
+            releases_dir: root.join("releases"),
             app_secret: Some(SECRET.into()),
         })
         .unwrap();

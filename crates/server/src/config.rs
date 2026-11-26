@@ -18,6 +18,9 @@ pub struct Config {
     pub music_dir: Option<PathBuf>,
     /// Where extracted album art is cached. Written to, unlike the music directory.
     pub artwork_dir: PathBuf,
+    /// Builds of the desktop app, one folder per platform (`linux-x86_64`,
+    /// `windows-x86_64`), each with the binary and a `latest.json` naming it.
+    pub releases_dir: PathBuf,
     pub app_secret: Option<String>,
 }
 
@@ -54,6 +57,12 @@ impl Config {
                 optional("ARTWORK_DIR")
                     .as_deref()
                     .unwrap_or(".artwork")
+                    .as_ref(),
+            ),
+            releases_dir: resolve(
+                optional("RELEASES_DIR")
+                    .as_deref()
+                    .unwrap_or("releases")
                     .as_ref(),
             ),
             app_secret: optional("APP_SECRET"),

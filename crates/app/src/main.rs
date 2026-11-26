@@ -2,6 +2,7 @@
 
 mod app;
 mod art;
+mod update;
 mod view;
 
 use std::sync::Arc;
@@ -29,6 +30,8 @@ fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    update::remember_exe();
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -50,5 +53,8 @@ fn main() -> anyhow::Result<()> {
     ctx.shutdown();
     drop(_entered);
     runtime.shutdown_timeout(std::time::Duration::from_secs(2));
+    if ctx.restart_requested() {
+        update::relaunch()?;
+    }
     Ok(())
 }

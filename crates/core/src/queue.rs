@@ -25,6 +25,11 @@ pub struct QueueView {
     pub index: usize,
     pub shuffle: bool,
     pub repeat: RepeatMode,
+    /// The shuffled play order, as indices into `tracks`, or empty when not
+    /// shuffling. Only meaningful on the device that is playing: it is not sent
+    /// to the others, which build their own order when they adopt a queue.
+    #[serde(skip)]
+    pub order: Vec<usize>,
 }
 
 #[derive(Debug)]
@@ -100,6 +105,11 @@ impl Queue {
             index: self.index,
             shuffle: self.shuffle,
             repeat: self.repeat,
+            order: if self.shuffle {
+                self.order.clone()
+            } else {
+                Vec::new()
+            },
         }
     }
 
@@ -483,6 +493,21 @@ mod tests {
     }
 
     #[test]
+    fn the_view_lists_the_shuffled_order() {
+        let mut q = Queue::default();
+        q.set((1..=5).map(track).collect(), 2);
+        assert!(q.view().order.is_empty());
+        q.toggle_shuffle();
+        let order = q.view().order;
+        assert_eq!(order[0], 2);
+        let mut sorted = order.clone();
+        sorted.sort();
+        assert_eq!(sorted, vec![0, 1, 2, 3, 4]);
+        q.toggle_shuffle();
+        assert!(q.view().order.is_empty());
+    }
+
+    #[test]
     fn adopting_a_remote_view_clamps_the_index() {
         let mut q = Queue::default();
         q.adopt(QueueView {
@@ -490,6 +515,7 @@ mod tests {
             index: 9,
             shuffle: true,
             repeat: RepeatMode::All,
+            order: Vec::new(),
         });
         assert_eq!(q.index(), 1);
         assert_eq!(q.order[0], 1);

@@ -1,12 +1,12 @@
 import { Spinner } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem } from "state.slint";
-import { NavItem, IconButton } from "widgets.slint";
-import { TrackItem } from "types.slint";
+import { NavItem, IconButton, PrimaryButton } from "widgets.slint";
+import { TrackItem, QueueItem } from "types.slint";
 import { AlbumsPage, ArtistsPage, AlbumPage, ArtistPage, SearchPage, PlaylistsPage, PlaylistPage, DownloadsPage, SetupPage, SignInPage } from "pages.slint";
 import { PlayerBar, QueuePanel, DevicesPanel } from "player.slint";
 
-export { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, TrackItem }
+export { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, TrackItem, QueueItem }
 
 component Sidebar inherits Rectangle {
     background: Theme.panel;
@@ -112,6 +112,11 @@ component Sidebar inherits Rectangle {
             }
         }
         Text {
+            text: "Version " + App.version;
+            color: Theme.faint;
+            font-size: Theme.size-small - 1px;
+        }
+        Text {
             text: "Sign out";
             color: signout.has-hover ? Theme.text : Theme.faint;
             font-size: Theme.size-small;
@@ -119,6 +124,48 @@ component Sidebar inherits Rectangle {
             signout := TouchArea {
                 mouse-cursor: pointer;
                 clicked => { App.sign-out(); }
+            }
+        }
+    }
+}
+
+// Across the top of the page while a newer build is waiting on the server.
+component UpdateBanner inherits Rectangle {
+    background: Theme.accent.with-alpha(0.14);
+    border-radius: Theme.radius + 2px;
+    border-width: 1px;
+    border-color: Theme.accent.with-alpha(0.4);
+    height: layout.preferred-height;
+
+    layout := HorizontalLayout {
+        padding: 10px;
+        padding-left: 16px;
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+            Text {
+                text: "This client version is out of date";
+                color: Theme.text;
+                font-size: Theme.size-body;
+                font-weight: 600;
+            }
+            Text {
+                text: App.update-error != ""
+                    ? App.update-error
+                    : "You have " + App.version + ", version " + App.update-version + " is available.";
+                color: App.update-error != "" ? Theme.danger : Theme.muted;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            PrimaryButton {
+                text: App.update-error != "" ? "Try again" : "Update and restart";
+                busy: App.update-busy;
+                clicked => { App.install-update(); }
             }
         }
     }
@@ -149,6 +196,11 @@ export component AppWindow inherits Window {
             Sidebar { }
             Rectangle {
                 VerticalLayout {
+                    if App.update-version != "": HorizontalLayout {
+                        padding: 12px;
+                        padding-bottom: 0;
+                        UpdateBanner { }
+                    }
                     if App.can-go-back: HorizontalLayout {
                         height: 44px;
                         padding-left: 12px;

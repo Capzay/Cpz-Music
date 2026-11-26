@@ -1101,3 +1101,63 @@ async fn hands_native_apps_the_public_supabase_settings() {
     assert!(body["supabaseUrl"].as_str().unwrap().starts_with("http://"));
     assert_eq!(h.mock.user_lookups.load(Ordering::SeqCst), 0);
 }
+
+#[tokio::test]
+async fn serves_the_latest_desktop_build_to_the_owner() {
+    let h = harness!();
+    let owner = h.owner_cookie();
+    let dir = h.state.config.releases_dir.join("linux-x86_64");
+
+    assert_eq!(
+        h.get("/api/client/latest/linux-x86_64", &owner)
+            .await
+            .status(),
+        404
+    );
+
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("cpz-music"), b"new build").unwrap();
+    std::fs::write(
+        dir.join("latest.json"),
+        r#"{ "version": "0.2.0", "file": "cpz-music", "sha256": "abc" }"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        h.get("/api/client/latest/linux-x86_64", "").await.status(),
+        401
+    );
+    assert_eq!(
+        h.get("/api/client/download/linux-x86_64", "")
+            .await
+            .status(),
+        401
+    );
+
+    let latest = h.json("/api/client/latest/linux-x86_64", &owner).await;
+    assert_eq!(latest["version"], "0.2.0");
+    assert_eq!(latest["sha256"], "abc");
+
+    let download = h.get("/api/client/download/linux-x86_64", &owner).await;
+    assert_eq!(download.status(), 200);
+    assert_eq!(download.bytes().await.unwrap().as_ref(), b"new build");
+
+    // A manifest pointing outside its folder is not followed.
+    std::fs::write(
+        dir.join("latest.json"),
+        r#"{ "version": "9.0.0", "file": "../../secret", "sha256": "abc" }"#,
+    )
+    .unwrap();
+    assert_eq!(
+        h.get("/api/client/latest/linux-x86_64", &owner)
+            .await
+            .status(),
+        404
+    );
+    assert_eq!(
+        h.get("/api/client/download/linux-x86_64", &owner)
+            .await
+            .status(),
+        404
+    );
+}

@@ -26,14 +26,18 @@ const TICK: Duration = Duration::from_millis(250);
 const MAX_TICK_GAIN: f64 = 1.5;
 const SAVE_EVERY: Duration = Duration::from_secs(10);
 const SAVED_KEY: &str = "player";
+/// While playing, the overlay is re-sent this often so a seek shows up there.
+const ANNOUNCE_EVERY: Duration = Duration::from_secs(15);
 
 /// Everything the player can be asked to do. Serializable so a remote device can
-/// send the same commands to whichever device is playing.
+/// send the same commands to whichever device is playing; the JSON matches the
+/// web app's, so both kinds of device can drive each other.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Command {
     /// Resume, or play this track: jump to it if queued, otherwise queue only it.
     Play {
+        #[serde(default)]
         track: Option<PlayerTrack>,
     },
     Pause,
@@ -42,14 +46,17 @@ pub enum Command {
     Prev,
     SetQueue {
         tracks: Vec<PlayerTrack>,
+        #[serde(rename = "startIndex", default)]
         start: usize,
     },
     PlayNext {
         track: PlayerTrack,
     },
+    #[serde(rename = "addToQueue")]
     Append {
         track: PlayerTrack,
     },
+    #[serde(rename = "removeFromQueue")]
     Remove {
         index: usize,
     },
@@ -115,6 +122,12 @@ struct Saved {
 enum Input {
     Command(Command),
     Engine(EngineEvent),
+    Adopt {
+        queue: QueueView,
+        position: f64,
+        playing: bool,
+    },
+    Active(bool),
     Shutdown,
 }
 
@@ -162,6 +175,8 @@ impl Player {
             listened: 0.0,
             last_position: 0.0,
             last_save: Instant::now(),
+            active: true,
+            last_announce: Instant::now(),
         };
         core.restore();
 
@@ -172,6 +187,12 @@ impl Player {
                     match inbox.recv_timeout(TICK) {
                         Ok(Input::Command(command)) => core.command(command),
                         Ok(Input::Engine(event)) => core.engine_event(event),
+                        Ok(Input::Adopt {
+                            queue,
+                            position,
+                            playing,
+                        }) => core.adopt(queue, position, playing),
+                        Ok(Input::Active(active)) => core.set_active(active),
                         Err(RecvTimeoutError::Timeout) => {}
                         Ok(Input::Shutdown) | Err(RecvTimeoutError::Disconnected) => {
                             core.leave_track(false);
@@ -193,6 +214,21 @@ impl Player {
 
     pub fn state(&self) -> PlayerState {
         self.state.borrow().clone()
+    }
+
+    /// Takes over what another device was playing, from where it had got to.
+    pub fn adopt(&self, queue: QueueView, position: f64, playing: bool) {
+        let _ = self.inputs.send(Input::Adopt {
+            queue,
+            position,
+            playing,
+        });
+    }
+
+    /// An inactive device is a remote: it stays quiet and stops telling the
+    /// server what it is playing, since something else is.
+    pub fn set_active(&self, active: bool) {
+        let _ = self.inputs.send(Input::Active(active));
     }
 
     pub fn subscribe(&self) -> watch::Receiver<PlayerState> {
@@ -225,9 +261,36 @@ struct Core {
     listened: f64,
     last_position: f64,
     last_save: Instant,
+    active: bool,
+    last_announce: Instant,
 }
 
 impl Core {
+    fn adopt(&mut self, queue: QueueView, position: f64, playing: bool) {
+        self.leave_track(false);
+        self.queue.adopt(queue);
+        self.state.playing = playing;
+        self.loaded = None;
+        if self.queue.current().is_some() {
+            self.load(position, playing);
+        } else {
+            self.engine.stop();
+        }
+        self.state.position = position;
+        self.announce();
+        self.save();
+        self.publish();
+    }
+
+    fn set_active(&mut self, active: bool) {
+        if !active && self.state.playing {
+            self.state.playing = false;
+            self.engine.pause();
+            self.publish();
+        }
+        self.active = active;
+    }
+
     fn restore(&mut self) {
         let Ok(Some(saved)) = self.deps.store.get::<Saved>(SAVED_KEY) else {
             return;
@@ -260,7 +323,11 @@ impl Core {
     }
 
     /// Tells the server what is playing, for the OBS overlay. Best effort.
-    fn announce(&self) {
+    fn announce(&mut self) {
+        if !self.active {
+            return;
+        }
+        self.last_announce = Instant::now();
         let api = self.deps.api.clone();
         let track = self.queue.current().cloned();
         let (playing, position) = (self.state.playing, self.state.position);
@@ -509,6 +576,9 @@ impl Core {
         if self.state.playing && self.last_save.elapsed() > SAVE_EVERY {
             self.save();
         }
+        if self.state.playing && self.last_announce.elapsed() > ANNOUNCE_EVERY {
+            self.announce();
+        }
     }
 }
 
@@ -534,6 +604,38 @@ mod tests {
         assert_eq!(
             serde_json::to_value(Command::Seek { time: 3.0 }).unwrap(),
             serde_json::json!({ "type": "seek", "time": 3.0 })
+        );
+    }
+
+    #[test]
+    fn reads_commands_the_web_app_sends() {
+        let parse = |json: serde_json::Value| serde_json::from_value::<Command>(json).unwrap();
+        assert_eq!(
+            parse(serde_json::json!({ "type": "play" })),
+            Command::Play { track: None }
+        );
+        assert_eq!(parse(serde_json::json!({ "type": "next" })), Command::Next);
+        assert_eq!(
+            parse(serde_json::json!({ "type": "removeFromQueue", "index": 2 })),
+            Command::Remove { index: 2 }
+        );
+        assert_eq!(
+            parse(serde_json::json!({ "type": "setQueue", "tracks": [], "startIndex": 3 })),
+            Command::SetQueue {
+                tracks: Vec::new(),
+                start: 3
+            }
+        );
+        assert_eq!(
+            parse(serde_json::json!({ "type": "setQueue", "tracks": [] })),
+            Command::SetQueue {
+                tracks: Vec::new(),
+                start: 0
+            }
+        );
+        assert_eq!(
+            parse(serde_json::json!({ "type": "cycleRepeat" })),
+            Command::CycleRepeat
         );
     }
 }

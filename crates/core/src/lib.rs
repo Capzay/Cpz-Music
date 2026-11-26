@@ -10,5 +10,6 @@ pub mod listens;
 pub mod player;
 pub mod playlists;
 pub mod queue;
+pub mod realtime;
 pub mod store;
 pub mod types;

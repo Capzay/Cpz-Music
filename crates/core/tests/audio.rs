@@ -1,164 +1,18 @@
 //! Playback end to end against a stand-in server, with no sound card: the null
 //! output reads samples at the speed a real device would.
 
+mod common;
+
 use std::io::{Read, Seek, SeekFrom};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use axum::Router;
-use axum::body::Body;
-use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode, header};
-use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
-use cpz_core::api::Api;
+use common::{deps, serve, track, wait_until, wav};
 use cpz_core::audio::{Engine, EngineEvent, Media, Output, Remote};
-use cpz_core::auth::{Credentials, Session, SupabaseAuth};
-use cpz_core::downloads::Downloads;
-use cpz_core::listens::Listens;
-use cpz_core::player::{Command, Player, PlayerDeps, PlayerState};
+use cpz_core::player::{Command, Player};
 use cpz_core::store::Store;
-use cpz_core::types::{ClientConfig, PlayerTrack, RepeatMode, TrackAlbum, TrackArtist};
-use tokio::net::TcpListener;
-
-/// A mono 8-bit WAV of `secs` seconds whose samples are a recognisable ramp.
-fn wav(secs: f32) -> Vec<u8> {
-    let rate: u32 = 8000;
-    let data: Vec<u8> = (0..(rate as f32 * secs) as usize)
-        .map(|i| (i % 251) as u8)
-        .collect();
-    let mut out = Vec::new();
-    out.extend_from_slice(b"RIFF");
-    out.extend_from_slice(&(36 + data.len() as u32).to_le_bytes());
-    out.extend_from_slice(b"WAVEfmt ");
-    out.extend_from_slice(&16u32.to_le_bytes());
-    out.extend_from_slice(&1u16.to_le_bytes());
-    out.extend_from_slice(&1u16.to_le_bytes());
-    out.extend_from_slice(&rate.to_le_bytes());
-    out.extend_from_slice(&rate.to_le_bytes());
-    out.extend_from_slice(&1u16.to_le_bytes());
-    out.extend_from_slice(&8u16.to_le_bytes());
-    out.extend_from_slice(b"data");
-    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
-    out.extend_from_slice(&data);
-    out
-}
-
-#[derive(Default)]
-struct Fake {
-    files: Mutex<Vec<Vec<u8>>>,
-    /// Sleep this long between 16 KiB chunks, to make the download lag.
-    throttle: Mutex<Duration>,
-    requests: AtomicUsize,
-    range_starts: Mutex<Vec<u64>>,
-    listens: Mutex<Vec<serde_json::Value>>,
-    now_playing: AtomicUsize,
-}
-
-async fn stream(
-    State(fake): State<Arc<Fake>>,
-    Path(id): Path<usize>,
-    headers: HeaderMap,
-) -> Response {
-    fake.requests.fetch_add(1, Ordering::SeqCst);
-    let Some(file) = fake.files.lock().unwrap().get(id).cloned() else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    let len = file.len() as u64;
-    let start: u64 = headers
-        .get(header::RANGE)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("bytes="))
-        .and_then(|v| v.trim_end_matches('-').parse().ok())
-        .unwrap_or(0);
-    fake.range_starts.lock().unwrap().push(start);
-
-    let throttle = *fake.throttle.lock().unwrap();
-    let chunks: Vec<Vec<u8>> = file[start as usize..]
-        .chunks(16 * 1024)
-        .map(<[u8]>::to_vec)
-        .collect();
-    let body = Body::from_stream(futures_util::stream::unfold(
-        chunks.into_iter(),
-        move |mut rest| async move {
-            let chunk = rest.next()?;
-            if !throttle.is_zero() {
-                tokio::time::sleep(throttle).await;
-            }
-            Some((Ok::<_, std::io::Error>(chunk), rest))
-        },
-    ));
-    Response::builder()
-        .status(StatusCode::PARTIAL_CONTENT)
-        .header(header::CONTENT_TYPE, "audio/wav")
-        .header(
-            header::CONTENT_RANGE,
-            format!("bytes {start}-{}/{len}", len - 1),
-        )
-        .header(header::CONTENT_LENGTH, len - start)
-        .body(body)
-        .unwrap()
-}
-
-async fn listen(State(fake): State<Arc<Fake>>, body: axum::Json<serde_json::Value>) -> StatusCode {
-    fake.listens.lock().unwrap().push(body.0);
-    StatusCode::NO_CONTENT
-}
-
-async fn now_playing(State(fake): State<Arc<Fake>>) -> StatusCode {
-    fake.now_playing.fetch_add(1, Ordering::SeqCst);
-    StatusCode::NO_CONTENT
-}
-
-async fn serve(files: Vec<Vec<u8>>) -> (Arc<Fake>, Api) {
-    let fake = Arc::new(Fake::default());
-    *fake.files.lock().unwrap() = files;
-    let router = Router::new()
-        .route("/api/tracks/{id}/stream", get(stream))
-        .route("/api/stats/listen", post(listen))
-        .route("/api/now-playing", post(now_playing))
-        .with_state(fake.clone());
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-
-    let http = cpz_core::http::client();
-    let config = ClientConfig {
-        supabase_url: "http://127.0.0.1:9".into(),
-        anon_key: "anon".into(),
-    };
-    let session = Session {
-        access_token: "token".into(),
-        refresh_token: "refresh".into(),
-        expires_at: i64::MAX / 2,
-    };
-    let credentials = Credentials::new(
-        SupabaseAuth::new(http.clone(), config),
-        Some(session),
-        Box::new(|_| {}),
-    );
-    (fake, Api::new(http, &url, credentials))
-}
-
-fn track(id: i32) -> PlayerTrack {
-    PlayerTrack {
-        id,
-        title: format!("Track {id}"),
-        duration: Some(1.0),
-        track_number: Some(id),
-        disc_number: 1,
-        artist: TrackArtist {
-            id: 1,
-            name: "A".into(),
-        },
-        album: TrackAlbum {
-            id: 1,
-            title: "B".into(),
-            has_artwork: false,
-        },
-    }
-}
+use cpz_core::types::RepeatMode;
 
 fn wait_for_event(events: &std::sync::mpsc::Receiver<EngineEvent>, secs: u64) -> EngineEvent {
     events
@@ -294,38 +148,6 @@ async fn the_engine_pauses_seeks_and_reports_failures() {
         other => panic!("{other:?}"),
     }
     engine.stop();
-}
-
-async fn wait_until(
-    player: &Player,
-    secs: u64,
-    check: impl Fn(&PlayerState) -> bool,
-) -> PlayerState {
-    let mut watch = player.subscribe();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(secs);
-    loop {
-        let state = watch.borrow_and_update().clone();
-        if check(&state) {
-            return state;
-        }
-        if tokio::time::timeout_at(deadline, watch.changed())
-            .await
-            .is_err()
-        {
-            panic!("timed out; last state: {state:?}");
-        }
-    }
-}
-
-fn deps(api: &Api, store: &Arc<Store>, dir: &std::path::Path) -> PlayerDeps {
-    PlayerDeps {
-        api: api.clone(),
-        store: store.clone(),
-        downloads: Arc::new(Downloads::new(store.clone(), dir.join("downloads"))),
-        listens: Arc::new(Listens::new(store.clone())),
-        cache_dir: dir.join("cache"),
-        output: Output::Null,
-    }
 }
 
 #[tokio::test(flavor = "multi_thread")]

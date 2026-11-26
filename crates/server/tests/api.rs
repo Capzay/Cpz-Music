@@ -1041,8 +1041,14 @@ async fn native_apps_authenticate_with_a_bearer_token() {
     let body: Value = ok.json().await.unwrap();
     assert_eq!(body["tracks"][0]["title"], "01 Hey You");
 
-    assert_eq!(search("Bearer not-a-token".into()).await.unwrap().status(), 401);
-    assert_eq!(search(format!("Basic {token}")).await.unwrap().status(), 401);
+    assert_eq!(
+        search("Bearer not-a-token".into()).await.unwrap().status(),
+        401
+    );
+    assert_eq!(
+        search(format!("Basic {token}")).await.unwrap().status(),
+        401
+    );
 }
 
 #[tokio::test]
@@ -1053,7 +1059,10 @@ async fn native_sign_in_stamps_the_owner_flag_for_the_host_only() {
         "app_metadata": {},
         "identities": [{ "provider": "github", "identity_data": { "provider_id": support::OWNER } }],
     }));
-    let token = h.mock.session(&host, 3600)["access_token"].as_str().unwrap().to_owned();
+    let token = h.mock.session(&host, 3600)["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let stamp = |token: String| {
         h.http
             .post(h.url("/api/auth/owner"))
@@ -1067,8 +1076,28 @@ async fn native_sign_in_stamps_the_owner_flag_for_the_host_only() {
     let again: Value = stamp(token).await.unwrap().json().await.unwrap();
     assert_eq!(again["refresh"], false);
 
-    let stranger = h.mock.add_user(json!({ "id": "stranger", "app_metadata": {} }));
-    let token = h.mock.session(&stranger, 3600)["access_token"].as_str().unwrap().to_owned();
+    let stranger = h
+        .mock
+        .add_user(json!({ "id": "stranger", "app_metadata": {} }));
+    let token = h.mock.session(&stranger, 3600)["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     assert_eq!(stamp(token).await.unwrap().status(), 401);
-    assert!(h.mock.user(&stranger)["app_metadata"].get("owner").is_none());
+    assert!(
+        h.mock.user(&stranger)["app_metadata"]
+            .get("owner")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn hands_native_apps_the_public_supabase_settings() {
+    let h = harness!();
+    let response = h.get("/api/config", "").await;
+    assert_eq!(response.status(), 200);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["anonKey"], "anon");
+    assert!(body["supabaseUrl"].as_str().unwrap().starts_with("http://"));
+    assert_eq!(h.mock.user_lookups.load(Ordering::SeqCst), 0);
 }

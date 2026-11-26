@@ -125,9 +125,10 @@ pub fn is_guest_allowed(method: &Method, path: &str) -> bool {
 /// Reachable without a session. `/api/now-playing` is not unauthenticated: it
 /// carries its own signed-token check, because an OBS browser source cannot
 /// complete an OAuth flow, so the handler does the work itself.
-const PUBLIC_PATHS: [&str; 5] = [
+const PUBLIC_PATHS: [&str; 6] = [
     "/auth/callback",
     "/api/health",
+    "/api/config",
     "/jam",
     "/api/now-playing",
     "/api/artwork",
@@ -143,7 +144,7 @@ fn is_public(path: &str) -> bool {
 /// Never read the caller's identity, so they skip the auth server entirely. Cover
 /// art is fetched by Discord's media proxy and OBS, which have no session to send.
 fn ignores_identity(path: &str) -> bool {
-    path == "/api/health" || path.starts_with("/api/artwork/")
+    path == "/api/health" || path == "/api/config" || path.starts_with("/api/artwork/")
 }
 
 /// Who is calling, plus what the response must do to keep their session alive.

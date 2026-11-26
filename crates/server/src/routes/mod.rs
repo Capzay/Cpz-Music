@@ -9,7 +9,7 @@ mod stats;
 
 use std::collections::HashMap;
 
-use axum::extract::DefaultBodyLimit;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{HeaderValue, header};
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, post};
@@ -42,6 +42,15 @@ type Params = HashMap<String, String>;
 fn parse_id(raw: &str) -> Option<i32> {
     let id: f64 = raw.parse().ok()?;
     (id.fract() == 0.0 && id.abs() <= f64::from(i32::MAX)).then_some(id as i32)
+}
+
+/// What a native app needs to sign in, so it only has to be told the server URL.
+/// Both values ship in every Supabase client by design; RLS is what protects data.
+async fn client_config(State(state): State<Shared>) -> Json<Value> {
+    Json(json!({
+        "supabaseUrl": state.config.supabase_url,
+        "anonKey": state.config.anon_key,
+    }))
 }
 
 async fn health() -> Json<Value> {
@@ -83,6 +92,7 @@ pub fn router(state: Shared) -> Router {
 
     let api = Router::new()
         .route("/api/health", get(health))
+        .route("/api/config", get(client_config))
         .route("/api/auth/owner", post(auth::owner))
         .route("/api/search", get(library::search))
         .route("/api/library/tracks", get(library::tracks))

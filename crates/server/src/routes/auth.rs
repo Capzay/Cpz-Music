@@ -77,7 +77,10 @@ pub async fn owner(
             .await
             .map_err(|err| {
                 tracing::error!("could not stamp owner flag: {err:#}");
-                ApiError::Status(axum::http::StatusCode::BAD_GATEWAY, "Could not reach auth server")
+                ApiError::Status(
+                    axum::http::StatusCode::BAD_GATEWAY,
+                    "Could not reach auth server",
+                )
             })?;
         state.auth.revoke_cached();
     }

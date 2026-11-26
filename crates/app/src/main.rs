@@ -2,7 +2,6 @@
 
 mod app;
 mod art;
-mod screenshot;
 mod view;
 
 use std::sync::Arc;
@@ -29,14 +28,6 @@ fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| "info,cpz_core=info".into()),
         )
         .init();
-
-    let args: Vec<String> = std::env::args().collect();
-    if args.get(1).map(String::as_str) == Some("--screenshot") {
-        let screen = args.get(2).map_or("albums", String::as_str);
-        let out = args.get(3).map_or("screenshot.png", String::as_str);
-        let size = args.get(4).map_or("1280x800", String::as_str);
-        return screenshot::run(screen, out, size);
-    }
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)

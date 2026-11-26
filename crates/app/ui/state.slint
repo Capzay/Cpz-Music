@@ -1,31 +1,12 @@
 // The UI's state, filled in from Rust. Screens read these and call back.
 
-import { TrackItem } from "widgets.slint";
+import { TrackItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem } from "types.slint";
 
-export struct AlbumItem {
-    id: int,
-    title: string,
-    artist: string,
-    year: string,
-    art: image,
-}
-
-export struct ArtistItem {
-    id: int,
-    name: string,
-    detail: string,
-}
-
-export struct DeviceItem {
-    id: string,
-    name: string,
-    platform: string,
-    active: bool,
-    me: bool,
-}
+export { TrackItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem }
 
 export global App {
     // setup | signin | loading | albums | artists | album | artist | search
+    // | playlists | playlist
     in-out property <string> page: "loading";
     in property <bool> can-go-back;
     // Set while a request for the current page is out.
@@ -52,6 +33,10 @@ export global App {
     in property <[AlbumItem]> search-albums;
     in property <[ArtistItem]> search-artists;
 
+    in property <[PlaylistItem]> playlists;
+    in property <PlaylistItem> playlist;
+    in property <[TrackItem]> playlist-tracks;
+
     in-out property <string> server-url;
     in property <string> setup-error;
     in property <bool> signing-in;
@@ -69,6 +54,17 @@ export global App {
     callback cancel-sign-in();
     callback sign-out();
     callback retry();
+
+    // A track's menu: the list it is in, its row, what was picked, and for
+    // "add-to" the playlist's id.
+    callback track-action(string, int, string, string);
+    // The album page's menu, for the whole album.
+    callback album-action(string, string);
+    callback open-playlist(string);
+    // Makes a playlist and opens it.
+    callback create-playlist(string);
+    callback rename-playlist(string);
+    callback delete-playlist();
 }
 
 export global Playback {

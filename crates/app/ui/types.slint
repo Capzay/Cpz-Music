@@ -1,0 +1,48 @@
+// The shapes Rust hands to the screens.
+
+export struct TrackItem {
+    id: int,
+    title: string,
+    artist: string,
+    album: string,
+    album-id: int,
+    artist-id: int,
+    number: string,
+    duration: string,
+    // Playing now, on whichever device is.
+    current: bool,
+    // Downloaded to this device.
+    offline: bool,
+}
+
+export struct AlbumItem {
+    id: int,
+    title: string,
+    artist: string,
+    year: string,
+    art: image,
+}
+
+export struct ArtistItem {
+    id: int,
+    name: string,
+    detail: string,
+}
+
+export struct DeviceItem {
+    id: string,
+    name: string,
+    platform: string,
+    active: bool,
+    me: bool,
+}
+
+export struct PlaylistItem {
+    // The playlist's uuid.
+    id: string,
+    name: string,
+    detail: string,
+    // The album whose cover stands in for the playlist, or 0.
+    album-id: int,
+    art: image,
+}

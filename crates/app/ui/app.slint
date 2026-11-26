@@ -1,11 +1,12 @@
 import { Spinner } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { App, Playback, AlbumItem, ArtistItem, DeviceItem } from "state.slint";
-import { NavItem, IconButton, TrackItem } from "widgets.slint";
-import { AlbumsPage, ArtistsPage, AlbumPage, ArtistPage, SearchPage, SetupPage, SignInPage } from "pages.slint";
+import { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem } from "state.slint";
+import { NavItem, IconButton } from "widgets.slint";
+import { TrackItem } from "types.slint";
+import { AlbumsPage, ArtistsPage, AlbumPage, ArtistPage, SearchPage, PlaylistsPage, PlaylistPage, SetupPage, SignInPage } from "pages.slint";
 import { PlayerBar, QueuePanel, DevicesPanel } from "player.slint";
 
-export { App, Playback, AlbumItem, ArtistItem, DeviceItem, TrackItem }
+export { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, TrackItem }
 
 component Sidebar inherits Rectangle {
     background: Theme.panel;
@@ -57,6 +58,12 @@ component Sidebar inherits Rectangle {
             icon: @image-url("icons/artist.svg");
             selected: App.page == "artists";
             clicked => { App.navigate("artists"); }
+        }
+        NavItem {
+            text: "Playlists";
+            icon: @image-url("icons/playlist.svg");
+            selected: App.page == "playlists" || App.page == "playlist";
+            clicked => { App.navigate("playlists"); }
         }
         NavItem {
             text: "Search";
@@ -132,6 +139,8 @@ export component AppWindow inherits Window {
                         if App.page == "album": AlbumPage { }
                         if App.page == "artist": ArtistPage { }
                         if App.page == "search": SearchPage { }
+                        if App.page == "playlists": PlaylistsPage { }
+                        if App.page == "playlist": PlaylistPage { }
                     }
                 }
 

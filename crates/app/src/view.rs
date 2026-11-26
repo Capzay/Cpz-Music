@@ -4,12 +4,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use cpz_core::playlists::LocalPlaylist;
 use cpz_core::realtime::HubState;
 use cpz_core::types::{AlbumSummary, ArtistCard, ArtistHit, PlayerTrack, RepeatMode};
 use slint::{ComponentHandle, Image, Model, ModelRc, VecModel};
 
 use crate::art::Pixels;
-use crate::{AlbumItem, App, AppWindow, ArtistItem, DeviceItem, Playback, TrackItem};
+use crate::{AlbumItem, App, AppWindow, ArtistItem, DeviceItem, Playback, PlaylistItem, TrackItem};
 
 pub fn time(seconds: f64) -> String {
     let total = seconds.max(0.0).floor() as u64;
@@ -47,6 +48,8 @@ pub struct View {
     pub search_tracks: Rc<VecModel<TrackItem>>,
     pub search_albums: Rc<VecModel<AlbumItem>>,
     pub search_artists: Rc<VecModel<ArtistItem>>,
+    pub playlists: Rc<VecModel<PlaylistItem>>,
+    pub playlist_tracks: Rc<VecModel<TrackItem>>,
     pub queue: Rc<VecModel<TrackItem>>,
     pub devices: Rc<VecModel<DeviceItem>>,
 
@@ -81,6 +84,8 @@ pub fn install(ui: &AppWindow) {
     app.set_search_tracks(ModelRc::from(view.search_tracks.clone()));
     app.set_search_albums(ModelRc::from(view.search_albums.clone()));
     app.set_search_artists(ModelRc::from(view.search_artists.clone()));
+    app.set_playlists(ModelRc::from(view.playlists.clone()));
+    app.set_playlist_tracks(ModelRc::from(view.playlist_tracks.clone()));
     let playback = ui.global::<Playback>();
     playback.set_queue(ModelRc::from(view.queue.clone()));
     playback.set_devices(ModelRc::from(view.devices.clone()));
@@ -93,6 +98,38 @@ pub fn album_item(album: &AlbumSummary, art: Option<Pixels>) -> AlbumItem {
         title: album.title.as_str().into(),
         artist: album.artist.as_str().into(),
         year: album.year.map(|y| y.to_string()).unwrap_or_default().into(),
+        art: art.map(Image::from_rgb8).unwrap_or_default(),
+    }
+}
+
+/// The album whose cover stands in for a playlist: the first one that has art.
+pub fn cover_album(playlist: &LocalPlaylist) -> Option<i32> {
+    playlist
+        .tracks
+        .iter()
+        .find(|t| t.album.has_artwork)
+        .map(|t| t.album.id)
+}
+
+pub fn playlist_detail(playlist: &LocalPlaylist, with_length: bool) -> String {
+    let mut detail = plural(playlist.tracks.len(), "song", "songs");
+    let total: f64 = playlist.tracks.iter().filter_map(|t| t.duration).sum();
+    if with_length && total > 0.0 {
+        detail = format!("{detail} · {}", length(total));
+    }
+    detail
+}
+
+pub fn playlist_item(
+    playlist: &LocalPlaylist,
+    with_length: bool,
+    art: Option<Pixels>,
+) -> PlaylistItem {
+    PlaylistItem {
+        id: playlist.uuid.as_str().into(),
+        name: playlist.name.as_str().into(),
+        detail: playlist_detail(playlist, with_length).into(),
+        album_id: cover_album(playlist).unwrap_or(0),
         art: art.map(Image::from_rgb8).unwrap_or_default(),
     }
 }
@@ -139,6 +176,8 @@ pub fn track_item(
         title: track.title.as_str().into(),
         artist: track.artist.name.as_str().into(),
         album: track.album.title.as_str().into(),
+        album_id: track.album.id,
+        artist_id: track.artist.id,
         number: number.into(),
         duration: track.duration.map(time).unwrap_or_default().into(),
         current: current == Some(track.id),
@@ -147,8 +186,13 @@ pub fn track_item(
 }
 
 impl View {
-    fn track_models(&self) -> [&Rc<VecModel<TrackItem>>; 3] {
-        [&self.album_tracks, &self.artist_tracks, &self.search_tracks]
+    fn track_models(&self) -> [&Rc<VecModel<TrackItem>>; 4] {
+        [
+            &self.album_tracks,
+            &self.artist_tracks,
+            &self.search_tracks,
+            &self.playlist_tracks,
+        ]
     }
 
     /// Moves the "playing" highlight in every list when the track changes.
@@ -181,11 +225,23 @@ impl View {
                 }
             }
         }
+        for row in 0..self.playlists.row_count() {
+            let mut item = self.playlists.row_data(row).expect("row is in range");
+            if item.album_id == album_id {
+                item.art = image.clone();
+                self.playlists.set_row_data(row, item);
+            }
+        }
         let app = ui.global::<App>();
         let mut album = app.get_album();
         if album.id == album_id {
             album.art = image.clone();
             app.set_album(album);
+        }
+        let mut playlist = app.get_playlist();
+        if playlist.album_id == album_id {
+            playlist.art = image.clone();
+            app.set_playlist(playlist);
         }
         if self.playback_album == Some(album_id) {
             ui.global::<Playback>().set_art(image);

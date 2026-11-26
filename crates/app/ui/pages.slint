@@ -1,6 +1,6 @@
 import { ScrollView, Spinner } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { App, AlbumItem, ArtistItem } from "state.slint";
+import { App, AlbumItem, ArtistItem, PlaylistItem } from "state.slint";
 import { Cover, TrackRow, TrackItem, PlayButton, PrimaryButton, IconButton, Notice, TextField } from "widgets.slint";
 
 component AlbumCard inherits Rectangle {
@@ -204,16 +204,78 @@ component TrackList inherits VerticalLayout {
     in property <[TrackItem]> tracks;
     in property <string> source;
     in property <bool> show-album;
+    in property <bool> in-playlist;
     spacing: 0;
     for track[i] in root.tracks: TrackRow {
         track: track;
         show-album: root.show-album;
         unavailable: App.offline && !track.offline;
+        in-playlist: root.in-playlist;
+        first: i == 0;
+        last: i == root.tracks.length - 1;
+        playlists: App.playlists;
         play => { App.play-list(root.source, i); }
+        action(action, arg) => { App.track-action(root.source, i, action, arg); }
+    }
+}
+
+// Play, shuffle and the "more" menu, under an album or playlist header.
+component ListActions inherits HorizontalLayout {
+    in property <bool> enabled;
+    in property <string> source;
+    // Playlists can be added to other playlists like albums can.
+    in property <bool> can-add: true;
+    callback more-clicked(length, length);
+    spacing: 12px;
+    alignment: start;
+    PlayButton {
+        size: 52px;
+        enabled: root.enabled;
+        clicked => { App.play-list(root.source, 0); }
+    }
+    IconButton {
+        icon: @image-url("icons/shuffle.svg");
+        size: 22px;
+        enabled: root.enabled;
+        y: (parent.height - self.height) / 2;
+        clicked => { App.shuffle-list(root.source); }
+    }
+    more := IconButton {
+        icon: @image-url("icons/more.svg");
+        size: 22px;
+        enabled: root.enabled && root.can-add;
+        y: (parent.height - self.height) / 2;
+        // In window coordinates, so the page's menu can open right here.
+        clicked => { root.more-clicked(self.absolute-position.x, self.absolute-position.y + self.height); }
+    }
+}
+
+// What can be done with a whole list at once.
+component ListMenu inherits ContextMenuArea {
+    in property <string> source;
+    Menu {
+        MenuItem {
+            title: "Add to queue";
+            activated => { App.album-action("queue", root.source); }
+        }
+        Menu {
+            title: "Add to playlist";
+            MenuItem {
+                title: "New playlist";
+                activated => { App.album-action("new-playlist", root.source); }
+            }
+            MenuSeparator { }
+            for playlist in App.playlists: MenuItem {
+                title: playlist.name;
+                activated => { App.album-action("add-to:" + playlist.id, root.source); }
+            }
+        }
     }
 }
 
 export component AlbumPage inherits Rectangle {
+    // Underneath the page, so track rows take their own right-clicks first.
+    album-menu := ListMenu { source: "album"; }
     if App.album.id > 0: ScrollView {
         VerticalLayout {
             alignment: start;
@@ -261,19 +323,11 @@ export component AlbumPage inherits Rectangle {
                         font-size: Theme.size-small;
                     }
                     Rectangle { height: 8px; }
-                    HorizontalLayout {
-                        spacing: 12px;
-                        alignment: start;
-                        PlayButton {
-                            size: 52px;
-                            enabled: App.album-tracks.length > 0;
-                            clicked => { App.play-list("album", 0); }
-                        }
-                        IconButton {
-                            icon: @image-url("icons/shuffle.svg");
-                            size: 22px;
-                            y: (parent.height - self.height) / 2;
-                            clicked => { App.shuffle-list("album"); }
+                    ListActions {
+                        enabled: App.album-tracks.length > 0;
+                        source: "album";
+                        more-clicked(x, y) => {
+                            album-menu.show({ x: x - album-menu.absolute-position.x, y: y - album-menu.absolute-position.y });
                         }
                     }
                 }
@@ -293,6 +347,7 @@ export component AlbumPage inherits Rectangle {
 }
 
 export component ArtistPage inherits Rectangle {
+    artist-menu := ListMenu { source: "artist"; }
     if App.artist-name != "": ScrollView {
         VerticalLayout {
             alignment: start;
@@ -321,19 +376,11 @@ export component ArtistPage inherits Rectangle {
                     font-size: Theme.size-small;
                 }
             }
-            HorizontalLayout {
-                spacing: 12px;
-                alignment: start;
-                PlayButton {
-                    size: 52px;
-                    enabled: App.artist-tracks.length > 0;
-                    clicked => { App.play-list("artist", 0); }
-                }
-                IconButton {
-                    icon: @image-url("icons/shuffle.svg");
-                    size: 22px;
-                    y: (parent.height - self.height) / 2;
-                    clicked => { App.shuffle-list("artist"); }
+            ListActions {
+                enabled: App.artist-tracks.length > 0;
+                source: "artist";
+                more-clicked(x, y) => {
+                    artist-menu.show({ x: x - artist-menu.absolute-position.x, y: y - artist-menu.absolute-position.y });
                 }
             }
 
@@ -407,6 +454,230 @@ export component SearchPage inherits Rectangle {
                 }
             }
         }
+    }
+}
+
+component PlaylistRow inherits Rectangle {
+    in property <PlaylistItem> playlist;
+    callback clicked;
+
+    height: 72px;
+    border-radius: Theme.radius;
+    background: touch.has-hover ? Theme.hover : transparent;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        spacing: 14px;
+        Cover {
+            art: root.playlist.art;
+            width: 52px;
+            height: 52px;
+            y: (parent.height - self.height) / 2;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.playlist.name;
+                color: Theme.text;
+                font-size: Theme.size-body;
+                font-weight: 600;
+                overflow: elide;
+            }
+            Text {
+                text: root.playlist.detail;
+                color: Theme.muted;
+                font-size: Theme.size-small;
+            }
+        }
+    }
+}
+
+export component PlaylistsPage inherits Rectangle {
+    property <bool> naming;
+
+    ScrollView {
+        VerticalLayout {
+            alignment: start;
+            padding: Theme.page-padding;
+            spacing: 4px;
+            HorizontalLayout {
+                spacing: 12px;
+                Heading { text: "Playlists"; }
+                if !root.naming: PrimaryButton {
+                    text: "New playlist";
+                    icon: @image-url("icons/plus.svg");
+                    has-icon: true;
+                    clicked => { root.naming = true; }
+                }
+            }
+            if root.naming: HorizontalLayout {
+                padding-top: 14px;
+                spacing: 10px;
+                name := TextField {
+                    placeholder: "Name your playlist";
+                    accepted(text) => {
+                        if text != "" {
+                            App.create-playlist(text);
+                            root.naming = false;
+                        }
+                    }
+                    init => { self.focus-input(); }
+                }
+                PrimaryButton {
+                    text: "Create";
+                    enabled: name.text != "";
+                    clicked => {
+                        App.create-playlist(name.text);
+                        root.naming = false;
+                    }
+                }
+                IconButton {
+                    icon: @image-url("icons/close.svg");
+                    size: 18px;
+                    y: (parent.height - self.height) / 2;
+                    clicked => { root.naming = false; }
+                }
+            }
+            Rectangle { height: 14px; }
+            for playlist in App.playlists: PlaylistRow {
+                playlist: playlist;
+                clicked => { App.open-playlist(playlist.id); }
+            }
+            if App.playlists.length == 0 && !root.naming: Rectangle {
+                height: 240px;
+                Notice {
+                    title: "No playlists yet";
+                    body: "Make one here, or pick \"Add to playlist\" on any song or album.";
+                }
+            }
+        }
+    }
+}
+
+export component PlaylistPage inherits Rectangle {
+    property <bool> renaming;
+    property <bool> confirm-delete;
+
+    playlist-menu := ListMenu { source: "playlist"; }
+
+    if App.playlist.id != "": ScrollView {
+        VerticalLayout {
+            alignment: start;
+            padding: Theme.page-padding;
+            spacing: 28px;
+
+            HorizontalLayout {
+                spacing: 28px;
+                Cover {
+                    art: App.playlist.art;
+                    width: min(232px, max(120px, root.width * 0.24));
+                    height: self.width;
+                    corner: Theme.radius;
+                }
+                VerticalLayout {
+                    alignment: end;
+                    spacing: 8px;
+                    Text {
+                        text: "PLAYLIST";
+                        color: Theme.muted;
+                        font-size: Theme.size-small;
+                        font-weight: 600;
+                        letter-spacing: 1.2px;
+                    }
+                    if !root.renaming: Text {
+                        text: App.playlist.name;
+                        color: Theme.text;
+                        font-size: Theme.size-hero;
+                        font-weight: 800;
+                        wrap: word-wrap;
+                    }
+                    if root.renaming: HorizontalLayout {
+                        spacing: 10px;
+                        new-name := TextField {
+                            text: App.playlist.name;
+                            accepted(text) => {
+                                App.rename-playlist(text);
+                                root.renaming = false;
+                            }
+                            init => { self.focus-input(); }
+                        }
+                        PrimaryButton {
+                            text: "Save";
+                            enabled: new-name.text != "";
+                            clicked => {
+                                App.rename-playlist(new-name.text);
+                                root.renaming = false;
+                            }
+                        }
+                    }
+                    Text {
+                        text: App.playlist.detail;
+                        color: Theme.faint;
+                        font-size: Theme.size-small;
+                    }
+                    Rectangle { height: 8px; }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        alignment: start;
+                        ListActions {
+                            enabled: App.playlist-tracks.length > 0;
+                            source: "playlist";
+                            more-clicked(x, y) => {
+                                playlist-menu.show({ x: x - playlist-menu.absolute-position.x, y: y - playlist-menu.absolute-position.y });
+                            }
+                        }
+                        IconButton {
+                            icon: @image-url("icons/edit.svg");
+                            size: 20px;
+                            y: (parent.height - self.height) / 2;
+                            clicked => { root.renaming = !root.renaming; }
+                        }
+                        IconButton {
+                            icon: @image-url("icons/trash.svg");
+                            size: 20px;
+                            y: (parent.height - self.height) / 2;
+                            tint: root.confirm-delete ? Theme.danger : (self.has-hover ? Theme.text : Theme.muted);
+                            clicked => {
+                                if root.confirm-delete {
+                                    App.delete-playlist();
+                                    root.confirm-delete = false;
+                                } else {
+                                    root.confirm-delete = true;
+                                }
+                            }
+                        }
+                        if root.confirm-delete: Text {
+                            text: "Click again to delete";
+                            color: Theme.danger;
+                            font-size: Theme.size-small;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            if App.playlist-tracks.length == 0: Notice {
+                title: "This playlist is empty";
+                body: "Pick \"Add to playlist\" on any song or album to fill it.";
+            }
+            TrackList {
+                tracks: App.playlist-tracks;
+                source: "playlist";
+                show-album: true;
+                in-playlist: true;
+            }
+        }
+    }
+    PageState {
+        empty: App.playlist.id == "";
+        empty-title: "Playlist not found";
+        empty-body: "It may have been deleted on another device.";
     }
 }
 

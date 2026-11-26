@@ -15,20 +15,26 @@ use cpz_core::auth::{
 use cpz_core::downloads::Downloads;
 use cpz_core::listens::Listens;
 use cpz_core::player::{Command, Player, PlayerDeps};
+use cpz_core::playlists::Playlists;
 use cpz_core::realtime::{Channel, ChannelConfig, Hub, Identity, PLAYER_TOPIC};
 use cpz_core::store::Store;
 use cpz_core::types::{AlbumSummary, ArtistCard, ClientConfig, PlayerTrack};
 use slint::{ComponentHandle, Weak};
 
 use crate::art::Art;
-use crate::view::{self, album_item, artist_hit, artist_item, length, plural, track_item};
-use crate::{AlbumItem, App, AppWindow, Playback};
+use crate::view::{
+    self, album_item, artist_hit, artist_item, cover_album, length, playlist_item, plural,
+    track_item,
+};
+use crate::{AlbumItem, App, AppWindow, Playback, PlaylistItem};
 
 const SERVER_KEY: &str = "server";
 const CONFIG_KEY: &str = "client-config";
 const SESSION_KEY: &str = "session";
 const SEARCH_DELAY: Duration = Duration::from_millis(250);
 const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(600);
+/// Edits sync straight away; this catches ones made on other devices.
+const PLAYLIST_SYNC_EVERY: Duration = Duration::from_secs(60);
 
 pub struct Paths {
     pub data: PathBuf,
@@ -40,26 +46,32 @@ pub struct Services {
     pub api: Api,
     pub hub: Hub,
     pub downloads: Arc<Downloads>,
+    pub playlists: Arc<Playlists>,
     pub art: Arc<Art>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum Route {
     Albums,
     Artists,
     Album(i32),
     Artist(i32),
     Search,
+    Playlists,
+    /// By uuid.
+    Playlist(String),
 }
 
 impl Route {
-    fn page(self) -> &'static str {
+    fn page(&self) -> &'static str {
         match self {
             Self::Albums => "albums",
             Self::Artists => "artists",
             Self::Album(_) => "album",
             Self::Artist(_) => "artist",
             Self::Search => "search",
+            Self::Playlists => "playlists",
+            Self::Playlist(_) => "playlist",
         }
     }
 }
@@ -71,6 +83,7 @@ struct Lists {
     album: Vec<PlayerTrack>,
     artist: Vec<PlayerTrack>,
     search: Vec<PlayerTrack>,
+    playlist: Vec<PlayerTrack>,
 }
 
 impl Lists {
@@ -79,6 +92,7 @@ impl Lists {
             "album" => &self.album,
             "artist" => &self.artist,
             "search" => &self.search,
+            "playlist" => &self.playlist,
             _ => &[],
         }
     }
@@ -408,16 +422,34 @@ impl Ctx {
         );
         let hub = Hub::start(player, Some(channel), identity, store);
 
+        let playlists = Arc::new(Playlists::load(self.shared.store.clone()));
         let services = Arc::new(Services {
             api: api.clone(),
             hub,
             downloads,
+            playlists,
             art,
         });
         *self.shared.services.lock().unwrap() = Some(services.clone());
         tokio::spawn(async move { listens.flush(&api).await });
 
         self.watch_hub(&services);
+        self.refresh_playlists();
+        let ctx = self.clone();
+        tokio::spawn(async move {
+            let mut every = tokio::time::interval(PLAYLIST_SYNC_EVERY);
+            loop {
+                every.tick().await;
+                // Stops once signed out, when these services are gone.
+                if !ctx
+                    .services()
+                    .is_some_and(|current| Arc::ptr_eq(&current, &services))
+                {
+                    return;
+                }
+                ctx.sync_playlists_now(&services).await;
+            }
+        });
         let ctx = self.clone();
         self.ui(move |_| ctx.go_top(Route::Albums));
     }
@@ -457,14 +489,14 @@ impl Ctx {
     // ── Pages ───────────────────────────────────────────────────────────────
 
     fn go_top(&self, route: Route) {
-        *self.shared.routes.lock().unwrap() = vec![route];
+        *self.shared.routes.lock().unwrap() = vec![route.clone()];
         self.show(route);
     }
 
     fn open(&self, route: Route) {
         let mut routes = self.shared.routes.lock().unwrap();
         if routes.last() != Some(&route) {
-            routes.push(route);
+            routes.push(route.clone());
         }
         drop(routes);
         self.show(route);
@@ -476,7 +508,7 @@ impl Ctx {
             if routes.len() > 1 {
                 routes.pop();
             }
-            routes.last().copied()
+            routes.last().cloned()
         };
         if let Some(route) = route {
             self.show(route);
@@ -486,9 +518,10 @@ impl Ctx {
     fn show(&self, route: Route) {
         let generation = self.shared.page_generation.fetch_add(1, Ordering::AcqRel) + 1;
         let can_go_back = self.shared.routes.lock().unwrap().len() > 1;
+        let page = route.page();
         self.ui(move |ui| {
             let app = ui.global::<App>();
-            app.set_page(route.page().into());
+            app.set_page(page.into());
             app.set_can_go_back(can_go_back);
             app.set_error("".into());
             app.set_busy(false);
@@ -655,6 +688,8 @@ impl Ctx {
             }
             // Results come from typing, not from opening the page.
             Route::Search => {}
+            // Playlists live on the device, so there is nothing to wait for.
+            Route::Playlists | Route::Playlist(_) => self.refresh_playlists(),
         }
     }
 
@@ -779,7 +814,8 @@ impl Ctx {
     fn retry(&self) {
         *self.shared.albums.lock().unwrap() = None;
         *self.shared.artists.lock().unwrap() = None;
-        if let Some(route) = self.shared.routes.lock().unwrap().last().copied() {
+        let route = self.shared.routes.lock().unwrap().last().cloned();
+        if let Some(route) = route {
             self.show(route);
         }
     }
@@ -806,6 +842,193 @@ impl Ctx {
         }
     }
 
+    // ── Playlists ───────────────────────────────────────────────────────────
+
+    fn open_playlist_id(&self) -> Option<String> {
+        match self.shared.routes.lock().unwrap().last() {
+            Some(Route::Playlist(id)) => Some(id.clone()),
+            _ => None,
+        }
+    }
+
+    /// Redraws the playlists list, and the open playlist if there is one, from
+    /// what is on the device. Needs no network, so it works offline.
+    fn refresh_playlists(&self) {
+        let Some(services) = self.services() else {
+            return;
+        };
+        let art = &services.art;
+        let docs = services.playlists.list();
+        let rows: Vec<_> = docs
+            .iter()
+            .map(|doc| {
+                (
+                    doc.clone(),
+                    cover_album(doc).and_then(|album| art.get(album)),
+                )
+            })
+            .collect();
+        let open = self
+            .open_playlist_id()
+            .and_then(|id| services.playlists.find(&id))
+            .map(|doc| {
+                let tracks = self.track_rows(&services, &doc.tracks, false);
+                let pixels = cover_album(&doc).and_then(|album| art.get(album));
+                (doc, tracks, pixels)
+            });
+        self.shared.lists.lock().unwrap().playlist = open
+            .as_ref()
+            .map(|(doc, _, _)| doc.tracks.clone())
+            .unwrap_or_default();
+        let wanted: Vec<i32> = docs
+            .iter()
+            .filter_map(cover_album)
+            .filter(|album| art.get(*album).is_none())
+            .collect();
+
+        self.ui(move |ui| {
+            let app = ui.global::<App>();
+            let items: Vec<PlaylistItem> = rows
+                .into_iter()
+                .map(|(doc, pixels)| playlist_item(&doc, false, pixels))
+                .collect();
+            view::with(|v| v.playlists.set_vec(items));
+            match open {
+                Some((doc, tracks, pixels)) => {
+                    app.set_playlist(playlist_item(&doc, true, pixels));
+                    view::with(|v| v.playlist_tracks.set_vec(tracks));
+                }
+                None => {
+                    app.set_playlist(PlaylistItem::default());
+                    view::with(|v| v.playlist_tracks.set_vec(Vec::new()));
+                }
+            }
+        });
+        for album in wanted {
+            self.request_art(art, album);
+        }
+    }
+
+    async fn sync_playlists_now(&self, services: &Arc<Services>) {
+        match services.playlists.sync(&services.api).await {
+            Ok(()) => self.refresh_playlists(),
+            // Kept on the device and sent next time.
+            Err(err) => tracing::debug!("playlists not synced: {err}"),
+        }
+    }
+
+    fn sync_playlists(&self) {
+        let Some(services) = self.services() else {
+            return;
+        };
+        let ctx = self.clone();
+        tokio::spawn(async move { ctx.sync_playlists_now(&services).await });
+    }
+
+    /// Changes playlists on the device at once, then tells the server.
+    fn edit_playlists(&self, change: impl FnOnce(&Playlists)) {
+        let Some(services) = self.services() else {
+            return;
+        };
+        change(&services.playlists);
+        self.refresh_playlists();
+        self.sync_playlists();
+    }
+
+    fn create_playlist(&self, name: &str) {
+        let Some(services) = self.services() else {
+            return;
+        };
+        let Some(uuid) = services.playlists.create(name) else {
+            return;
+        };
+        self.sync_playlists();
+        self.open(Route::Playlist(uuid));
+    }
+
+    /// Named after what it was made from, as other music apps do. Stays on the
+    /// current page: the point was to file these songs away, not to leave.
+    fn new_playlist_with(&self, name: &str, tracks: Vec<PlayerTrack>) {
+        self.edit_playlists(|playlists| {
+            if let Some(uuid) = playlists.create(name) {
+                playlists.add_tracks(&uuid, &tracks);
+            }
+        });
+    }
+
+    fn rename_playlist(&self, name: &str) {
+        let Some(id) = self.open_playlist_id() else {
+            return;
+        };
+        self.edit_playlists(|playlists| {
+            playlists.rename(&id, name);
+        });
+    }
+
+    fn delete_playlist(&self) {
+        let Some(id) = self.open_playlist_id() else {
+            return;
+        };
+        self.edit_playlists(|playlists| {
+            playlists.delete(&id);
+        });
+        self.go_top(Route::Playlists);
+    }
+
+    fn track_action(&self, source: &str, index: usize, action: &str, arg: &str) {
+        let track = self
+            .shared
+            .lists
+            .lock()
+            .unwrap()
+            .get(source)
+            .get(index)
+            .cloned();
+        let Some(track) = track else { return };
+        let playlist = (source == "playlist")
+            .then(|| self.open_playlist_id())
+            .flatten();
+        match (action, playlist) {
+            ("play-next", _) => self.send(Command::PlayNext { track }),
+            ("queue", _) => self.send(Command::Append { track }),
+            ("add-to", _) => self.edit_playlists(|playlists| {
+                playlists.add_tracks(arg, &[track]);
+            }),
+            ("new-playlist", _) => self.new_playlist_with(&track.title.clone(), vec![track]),
+            ("album", _) => self.open(Route::Album(track.album.id)),
+            ("artist", _) => self.open(Route::Artist(track.artist.id)),
+            ("up", Some(id)) if index > 0 => self.edit_playlists(|playlists| {
+                playlists.move_track(&id, index, index - 1);
+            }),
+            ("down", Some(id)) => self.edit_playlists(|playlists| {
+                playlists.move_track(&id, index, index + 1);
+            }),
+            ("remove", Some(id)) => self.edit_playlists(|playlists| {
+                playlists.remove_track(&id, index);
+            }),
+            _ => {}
+        }
+    }
+
+    /// The album, artist or playlist page's own menu, for all of its songs.
+    fn list_action(&self, action: &str, source: &str, name: String) {
+        let tracks = self.shared.lists.lock().unwrap().get(source).to_vec();
+        if tracks.is_empty() {
+            return;
+        }
+        if action == "queue" {
+            for track in tracks {
+                self.send(Command::Append { track });
+            }
+        } else if action == "new-playlist" {
+            self.new_playlist_with(&name, tracks);
+        } else if let Some(uuid) = action.strip_prefix("add-to:") {
+            self.edit_playlists(|playlists| {
+                playlists.add_tracks(uuid, &tracks);
+            });
+        }
+    }
+
     // ── Wiring ──────────────────────────────────────────────────────────────
 
     pub fn wire(&self, ui: &AppWindow) {
@@ -815,6 +1038,7 @@ impl Ctx {
             "albums" => ctx.go_top(Route::Albums),
             "artists" => ctx.go_top(Route::Artists),
             "search" => ctx.go_top(Route::Search),
+            "playlists" => ctx.go_top(Route::Playlists),
             "album-artist" => {
                 let artist = *ctx.shared.album_artist.lock().unwrap();
                 if let Some(id) = artist {
@@ -846,6 +1070,33 @@ impl Ctx {
         app.on_sign_out(move || ctx.sign_out());
         let ctx = self.clone();
         app.on_retry(move || ctx.retry());
+        let ctx = self.clone();
+        app.on_track_action(move |source, index, action, arg| {
+            ctx.track_action(&source, index.max(0) as usize, &action, &arg);
+        });
+        let ctx = self.clone();
+        let weak = ui.as_weak();
+        app.on_album_action(move |action, source| {
+            // A playlist made from a whole page is named after it.
+            let name = weak.upgrade().map_or_else(String::new, |ui| {
+                let app = ui.global::<App>();
+                match source.as_str() {
+                    "album" => app.get_album().title.to_string(),
+                    "artist" => app.get_artist_name().to_string(),
+                    "playlist" => format!("{} (copy)", app.get_playlist().name),
+                    _ => String::new(),
+                }
+            });
+            ctx.list_action(&action, &source, name);
+        });
+        let ctx = self.clone();
+        app.on_open_playlist(move |id| ctx.open(Route::Playlist(id.to_string())));
+        let ctx = self.clone();
+        app.on_create_playlist(move |name| ctx.create_playlist(&name));
+        let ctx = self.clone();
+        app.on_rename_playlist(move |name| ctx.rename_playlist(&name));
+        let ctx = self.clone();
+        app.on_delete_playlist(move || ctx.delete_playlist());
 
         let playback = ui.global::<Playback>();
         let ctx = self.clone();

@@ -1,17 +1,7 @@
 import { Theme } from "theme.slint";
+import { TrackItem, PlaylistItem } from "types.slint";
 
-export struct TrackItem {
-    id: int,
-    title: string,
-    artist: string,
-    album: string,
-    number: string,
-    duration: string,
-    // Playing now, on whichever device is.
-    current: bool,
-    // Downloaded to this device.
-    offline: bool,
-}
+export { TrackItem }
 
 // An icon that is also a button.
 export component IconButton inherits Rectangle {
@@ -20,6 +10,7 @@ export component IconButton inherits Rectangle {
     in property <bool> active;
     in property <bool> enabled: true;
     in property <color> tint: active ? Theme.accent : (touch.has-hover && enabled ? Theme.text : Theme.muted);
+    out property <bool> has-hover: touch.has-hover;
     callback clicked;
 
     width: self.size + 16px;
@@ -216,76 +207,143 @@ export component NavItem inherits Rectangle {
     }
 }
 
+// One song in a list. Double-click (or tap) plays it; right-click, a long
+// press or the "more" button opens what else can be done with it.
 export component TrackRow inherits Rectangle {
     in property <TrackItem> track;
     in property <bool> show-album;
     // Not downloaded while offline: shown but not playable.
     in property <bool> unavailable;
+    // In a playlist, the row can also be moved and removed.
+    in property <bool> in-playlist;
+    in property <bool> first;
+    in property <bool> last;
+    in property <[PlaylistItem]> playlists;
     callback play;
+    // What was picked from the menu, and for "add-to" the playlist's id.
+    callback action(string, string);
 
     height: 48px;
     border-radius: 6px;
-    background: touch.has-hover && !unavailable ? Theme.hover : transparent;
+    background: (touch.has-hover || more.has-hover) && !unavailable ? Theme.hover : transparent;
     opacity: unavailable ? 0.4 : 1;
 
-    HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 16px;
-        spacing: 16px;
-
-        Text {
-            width: 28px;
-            text: root.track.number;
-            color: root.track.current ? Theme.accent : Theme.faint;
-            font-size: Theme.size-body;
-            horizontal-alignment: right;
-            vertical-alignment: center;
+    menu := ContextMenuArea {
+        Menu {
+            MenuItem {
+                title: "Play next";
+                enabled: !root.unavailable;
+                activated => { root.action("play-next", ""); }
+            }
+            MenuItem {
+                title: "Add to queue";
+                enabled: !root.unavailable;
+                activated => { root.action("queue", ""); }
+            }
+            Menu {
+                title: "Add to playlist";
+                MenuItem {
+                    title: "New playlist";
+                    activated => { root.action("new-playlist", ""); }
+                }
+                MenuSeparator { }
+                for playlist in root.playlists: MenuItem {
+                    title: playlist.name;
+                    activated => { root.action("add-to", playlist.id); }
+                }
+            }
+            MenuSeparator { }
+            MenuItem {
+                title: "Go to album";
+                activated => { root.action("album", ""); }
+            }
+            MenuItem {
+                title: "Go to artist";
+                activated => { root.action("artist", ""); }
+            }
+            if root.in-playlist: MenuSeparator { }
+            if root.in-playlist: MenuItem {
+                title: "Move up";
+                enabled: !root.first;
+                activated => { root.action("up", ""); }
+            }
+            if root.in-playlist: MenuItem {
+                title: "Move down";
+                enabled: !root.last;
+                activated => { root.action("down", ""); }
+            }
+            if root.in-playlist: MenuItem {
+                title: "Remove from playlist";
+                activated => { root.action("remove", ""); }
+            }
         }
-        VerticalLayout {
-            alignment: center;
-            spacing: 2px;
-            horizontal-stretch: 1;
+
+        touch := TouchArea {
+            enabled: !root.unavailable;
+            mouse-cursor: pointer;
+            double-clicked => { root.play(); }
+            // A single tap is a play on touch screens, which have no hover.
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.up && event.touch-finger-id != 0 {
+                    root.play();
+                }
+            }
+        }
+
+        HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 8px;
+            spacing: 16px;
+
             Text {
-                text: root.track.title;
-                color: root.track.current ? Theme.accent : Theme.text;
+                width: 28px;
+                text: root.track.number;
+                color: root.track.current ? Theme.accent : Theme.faint;
                 font-size: Theme.size-body;
-                font-weight: root.track.current ? 600 : 400;
-                overflow: elide;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                horizontal-stretch: 1;
+                Text {
+                    text: root.track.title;
+                    color: root.track.current ? Theme.accent : Theme.text;
+                    font-size: Theme.size-body;
+                    font-weight: root.track.current ? 600 : 400;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.show-album ? root.track.artist + "  ·  " + root.track.album : root.track.artist;
+                    color: Theme.muted;
+                    font-size: Theme.size-small;
+                    overflow: elide;
+                }
+            }
+            Rectangle {
+                width: 16px;
+                horizontal-stretch: 0;
+                if root.track.offline: Image {
+                    source: @image-url("icons/check.svg");
+                    width: 14px;
+                    colorize: Theme.accent;
+                }
             }
             Text {
-                text: root.show-album ? root.track.artist + "  ·  " + root.track.album : root.track.artist;
+                text: root.track.duration;
                 color: Theme.muted;
                 font-size: Theme.size-small;
-                overflow: elide;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+                min-width: 40px;
             }
-        }
-        Rectangle {
-            width: 16px;
-            horizontal-stretch: 0;
-            if root.track.offline: Image {
-                source: @image-url("icons/check.svg");
-                width: 14px;
-                colorize: Theme.accent;
-            }
-        }
-        Text {
-            text: root.track.duration;
-            color: Theme.muted;
-            font-size: Theme.size-small;
-            vertical-alignment: center;
-            horizontal-alignment: right;
-            min-width: 40px;
-        }
-    }
-
-    touch := TouchArea {
-        enabled: !root.unavailable;
-        mouse-cursor: pointer;
-        double-clicked => { root.play(); }
-        // A single tap is a play on touch screens, which have no hover.
-        pointer-event(event) => {
-            if event.kind == PointerEventKind.up && event.touch-finger-id != 0 {
-                root.play();
+            more := IconButton {
+                icon: @image-url("icons/more.svg");
+                size: 16px;
+                y: (parent.height - self.height) / 2;
+                opacity: touch.has-hover || self.has-hover ? 1 : 0;
+                clicked => { menu.show({ x: self.x, y: self.y + self.height }); }
             }
         }
     }

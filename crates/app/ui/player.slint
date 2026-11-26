@@ -1,7 +1,8 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Playback, App, DeviceItem } from "state.slint";
-import { Cover, IconButton, PlayButton, SeekBar, TrackItem } from "widgets.slint";
+import { Cover, IconButton, PlayButton, SeekBar } from "widgets.slint";
+import { TrackItem } from "types.slint";
 
 component Transport inherits HorizontalLayout {
     in property <length> play-size: 40px;

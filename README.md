@@ -95,30 +95,26 @@ worker both require a secure context.
 
 ## Desktop and Android
 
-Both are thin shells around the hosted site, so a web change reaches them
-without a rebuild. Each is a separate workspace with its own lockfile, and
-neither is installed by the web app.
+The Electron desktop wrapper is a thin shell around the hosted site, so a web
+change reaches it without a rebuild. It is a separate workspace with its own
+lockfile, not installed by the web app.
 
 ```bash
 cd electron && npm install && npm start          # dev
 cd electron && npm run dist:linux                # AppImage
-
-cd mobile && npm install
-cd mobile && npm run doctor                      # check JDK / SDK / adb
-cd mobile && npm run apk                         # sync + debug APK → mobile/dist/
-cd mobile && npm run apk:install                 # build, adb install, launch
+CPZ_SERVER_URL=https://music.example.com npm start   # your own deployment
 ```
 
-`npm run apk` runs `cap sync` then Gradle, so `CPZ_SERVER_URL` is baked in
-without editing config by hand. Point either shell at your own deployment:
+Android is the native Rust app in `crates/app`, built without Gradle:
 
 ```bash
-CPZ_SERVER_URL=https://music.example.com npm start          # Electron
-CPZ_SERVER_URL=https://music.example.com npm run apk        # Android
+cargo android            # signed release APK → dist/
+cargo android install    # build, adb install, launch
 ```
 
-Release builds need a keystore (`mobile/android/keystore.properties.example`).
-Chrome WebView debugging: `CPZ_WEB_DEBUG=1 npm run apk`.
+It needs the Android SDK with build-tools, a platform and the NDK
+(`ANDROID_HOME`, default `~/Android/Sdk`), a JDK, and
+`rustup target add aarch64-linux-android`. See `crates/xtask` for the steps.
 
 ## Architecture
 
@@ -166,7 +162,8 @@ src/
 └── instrumentation.ts
 prisma/               schema and migrations, including RLS policies
 electron/             desktop wrapper
-mobile/               Capacitor Android wrapper
+crates/               Rust server and native app (`rust` branch)
+android/              Android manifest, Java glue and icons for `cargo android`
 ```
 
 ## Security

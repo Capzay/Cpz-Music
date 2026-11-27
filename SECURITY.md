@@ -34,6 +34,6 @@ Supabase project itself being compromised.
   what enables row level security and revokes the default `anon` grants; the
   Supabase anon key is public, so skipping it exposes your data.
 - Serve over HTTPS. Session cookies and the service worker both require a
-  secure context, and `capacitor.config.ts` refuses cleartext.
+  secure context.
 - The OBS overlay link and jam invite links are bearer credentials. Anyone
   holding one can use it. Rotate `APP_SECRET` to invalidate all of them.

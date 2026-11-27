@@ -111,6 +111,31 @@ fn not_found() -> Response {
 /// `root` is the only directory this will ever read from. Paths come from the
 /// database rather than the URL, but the guard means a corrupted row or a future
 /// caller still cannot turn this into an arbitrary file reader.
+/// What an image really is, from its first bytes: a tag's declared type is
+/// often wrong (WebP covers labelled JPEG), and so can a file's extension be.
+/// Returns the extension and the MIME type.
+pub fn image_type(head: &[u8]) -> Option<(&'static str, &'static str)> {
+    if head.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some(("jpg", "image/jpeg"))
+    } else if head.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some(("png", "image/png"))
+    } else if head.len() >= 12 && head.starts_with(b"RIFF") && &head[8..12] == b"WEBP" {
+        Some(("webp", "image/webp"))
+    } else if head.starts_with(b"GIF87a") || head.starts_with(b"GIF89a") {
+        Some(("gif", "image/gif"))
+    } else {
+        None
+    }
+}
+
+/// `image_type` of a file on disk, if it can be read.
+pub async fn image_type_of(path: &str) -> Option<&'static str> {
+    let mut head = [0u8; 12];
+    let mut file = File::open(path).await.ok()?;
+    let read = file.read(&mut head).await.ok()?;
+    image_type(&head[..read]).map(|(_, mime)| mime)
+}
+
 pub async fn file_response(
     path: &str,
     root: &Path,
@@ -176,4 +201,28 @@ pub async fn file_response(
         );
     }
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::image_type;
+
+    #[test]
+    fn sniffs_image_types_from_their_bytes() {
+        assert_eq!(
+            image_type(&[0xFF, 0xD8, 0xFF, 0xE0]),
+            Some(("jpg", "image/jpeg"))
+        );
+        assert_eq!(
+            image_type(b"\x89PNG\r\n\x1a\n...."),
+            Some(("png", "image/png"))
+        );
+        assert_eq!(
+            image_type(b"RIFF\0\0\0\0WEBPVP8 "),
+            Some(("webp", "image/webp"))
+        );
+        assert_eq!(image_type(b"GIF89a"), Some(("gif", "image/gif")));
+        assert_eq!(image_type(b"RIFF\0\0\0\0WAVE"), None);
+        assert_eq!(image_type(b"fake jpeg"), None);
+    }
 }

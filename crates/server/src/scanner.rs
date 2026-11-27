@@ -105,11 +105,18 @@ impl Scanner {
     }
 
     async fn save_artwork(&self, album_id: i32, data: &[u8], mime_type: &str) -> Result<String> {
-        let extension = if mime_type.contains("png") {
-            "png"
-        } else {
-            "jpg"
+        let extension = match crate::media::image_type(data) {
+            Some((extension, _)) => extension,
+            None if mime_type.contains("png") => "png",
+            None => "jpg",
         };
+        // A cover saved earlier under another extension would be left behind.
+        for old in ["jpg", "png", "webp", "gif"] {
+            if old != extension {
+                let _ = tokio::fs::remove_file(self.artwork_dir.join(format!("{album_id}.{old}")))
+                    .await;
+            }
+        }
         let dest = self.artwork_dir.join(format!("{album_id}.{extension}"));
         tokio::fs::create_dir_all(&self.artwork_dir).await?;
         tokio::fs::write(&dest, data).await?;
@@ -276,6 +283,45 @@ impl Scanner {
         changed
     }
 
+    /// Albums with no cover file on disk get one of their tracks read again, even
+    /// though it has not changed: a scan only re-reads changed files, so a cover
+    /// that failed to save, or was deleted, would otherwise never come back.
+    /// Albums that simply have no art cost one tag read per scan.
+    async fn retry_missing_covers(&self) -> Result<(), sqlx::Error> {
+        let albums: Vec<(i32, Option<String>, String)> = sqlx::query_as(
+            r#"SELECT DISTINCT ON (al.id) al.id, al."artworkPath", t."filePath"
+               FROM "Album" al JOIN "Track" t ON t."albumId" = al.id
+               ORDER BY al.id, t."discNumber" ASC NULLS LAST, t."trackNumber" ASC NULLS LAST"#,
+        )
+        .fetch_all(&self.db)
+        .await?;
+        let mut missing = Vec::new();
+        for (_, cover, track) in albums {
+            let present = match &cover {
+                Some(path) => tokio::fs::try_exists(path).await.unwrap_or(false),
+                None => false,
+            };
+            // A track gone from disk is the cleanup's business, not this.
+            if !present && tokio::fs::try_exists(&track).await.unwrap_or(false) {
+                missing.push(track);
+            }
+        }
+        if missing.is_empty() {
+            return Ok(());
+        }
+        let count = missing.len();
+        let mut found = 0usize;
+        for track in missing {
+            // `None`: read it whatever its mtime says.
+            if self.process_file(track, None).await {
+                found += 1;
+            }
+        }
+        tracing::info!("re-read {found} of {count} albums with no cover file");
+        self.media.invalidate();
+        Ok(())
+    }
+
     /// Fails only on database errors, which the boot loop retries.
     pub async fn scan_library(&self) -> Result<(), sqlx::Error> {
         tracing::info!("scanning {}", self.root.display());
@@ -311,6 +357,7 @@ impl Scanner {
         let file_count = files.len();
         let changed = self.process_all(files, &known).await;
         tracing::info!("{changed} tracks added or updated");
+        self.retry_missing_covers().await?;
 
         // Deleting a track takes its playlist entries and listening history with
         // it, so the two ways a scan can be wrong about the disk both stop here: a

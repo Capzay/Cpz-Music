@@ -267,6 +267,33 @@ async fn serves_cover_art_without_a_session() {
     assert_eq!(cover.bytes().await.unwrap().as_ref(), b"fake jpeg");
 }
 
+/// A WebP cover in a file named .jpg is saved and served as WebP, and a cover
+/// file that goes missing comes back on the next scan even though no track
+/// changed.
+#[tokio::test]
+async fn covers_keep_their_real_type_and_come_back_when_lost() {
+    let h = harness!();
+    let webp = b"RIFF\x10\x00\x00\x00WEBPVP8 fake";
+    write_wav(&h.music.join("Artist/Album/01 One.wav"));
+    std::fs::write(h.music.join("Artist/Album/cover.jpg"), webp).unwrap();
+    h.scan().await;
+    let cookie = h.owner_cookie();
+    let id = h.json("/api/library/albums", &cookie).await["albums"][0]["id"]
+        .as_i64()
+        .unwrap();
+    let saved = h.state.config.artwork_dir.join(format!("{id}.webp"));
+    assert!(saved.exists());
+
+    let cover = h.get(&format!("/api/artwork/{id}"), "").await;
+    assert_eq!(cover.headers()["content-type"], "image/webp");
+    assert_eq!(cover.bytes().await.unwrap().as_ref(), webp);
+
+    std::fs::remove_file(&saved).unwrap();
+    h.scan().await;
+    assert!(saved.exists());
+    assert_eq!(h.get(&format!("/api/artwork/{id}"), "").await.status(), 200);
+}
+
 #[tokio::test]
 async fn a_rescan_touches_only_what_changed() {
     let h = harness!();

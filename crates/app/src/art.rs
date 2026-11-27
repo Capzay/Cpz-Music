@@ -106,3 +106,13 @@ pub fn decode(bytes: &[u8]) -> Option<Pixels> {
         rgb.height(),
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn decodes_webp_covers() {
+        // Some rips embed WebP covers; they showed blank before WebP support.
+        let pixels = super::decode(include_bytes!("../testdata/tiny.webp")).unwrap();
+        assert_eq!((pixels.width(), pixels.height()), (4, 4));
+    }
+}

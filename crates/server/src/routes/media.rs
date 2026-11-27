@@ -9,7 +9,7 @@ use super::parse_id;
 use crate::Shared;
 use crate::auth::{Identity, Resolved};
 use crate::error::{ApiError, ApiResult};
-use crate::media::file_response;
+use crate::media::{file_response, image_type_of};
 
 fn not_found() -> Response {
     (StatusCode::NOT_FOUND, "Not found").into_response()
@@ -33,11 +33,9 @@ pub async fn artwork(
         return Ok(not_found());
     };
 
-    let content_type = if path.ends_with(".png") {
-        "image/png"
-    } else {
-        "image/jpeg"
-    };
+    // From the bytes, not the extension: covers saved before this check went
+    // in can be WebP in a file called .jpg.
+    let content_type = image_type_of(&path).await.unwrap_or("image/jpeg");
 
     // Short: the URL is keyed by album id, so a rescan replaces the image behind
     // it. Public because the route is: Discord's proxy caches it on the way to the card.

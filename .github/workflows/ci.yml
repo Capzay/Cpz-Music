@@ -11,62 +11,27 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-
-      - run: npm ci
-
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
+    services:
+      postgres:
+        image: postgres:17-alpine
         env:
-          # Build-time only. No real project is contacted; the app reads these at runtime.
-          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
-
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
-
-  desktop:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: electron
+          POSTGRES_PASSWORD: pg
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:pg@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: 24
-      # Not `npm ci`: the desktop wrapper is a separate workspace with its own
-      # lockfile, and Electron itself is not needed to typecheck or test it.
-      - run: npm install --ignore-scripts
-      - run: npx tsc --noEmit
-      - run: npm test
-      - run: npm audit --audit-level=high
-
-  mobile:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mobile
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-      - run: npm install --ignore-scripts
-      # Catches a broken capacitor.config.ts or Android project layout without
-      # needing the Android SDK, which would make CI several minutes slower.
-      - run: npx cap sync android
-      - run: npm audit --audit-level=high
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      # Slint's desktop backend and the audio output link against these.
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libfontconfig1-dev libxkbcommon-dev
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
 
   secrets:
     runs-on: ubuntu-latest

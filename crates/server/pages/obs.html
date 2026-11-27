@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Now playing overlay</title>
+<style nonce="{nonce}">
+  * { box-sizing: border-box; }
+  /* Transparent, so OBS composites this over the scene. */
+  html, body { margin: 0; background: transparent; }
+  body {
+    min-height: 100vh; display: flex; align-items: flex-end; padding: 16px;
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff;
+  }
+  .card {
+    width: 420px; display: flex; flex-direction: column; gap: 10px;
+    padding: 12px 14px 10px; border-radius: 14px; border: 1px solid #ffffff1a;
+    background: rgba(10, 10, 10, .82); box-shadow: 0 10px 30px #0006;
+    backdrop-filter: blur(24px) saturate(1.5);
+    transition: opacity .45s, transform .45s; opacity: 0; transform: translateY(8px);
+  }
+  .card.on { opacity: 1; transform: none; }
+  .top { display: flex; gap: 12px; align-items: center; }
+  .art { width: 62px; height: 62px; flex: none; border-radius: 8px; background: #ffffff0d; overflow: hidden; }
+  .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .text { min-width: 0; flex: 1; }
+  .title, .sub { margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .title { font-weight: 600; }
+  .paused { margin-left: 6px; font-size: 10px; color: #ffffff8c; vertical-align: middle; }
+  .sub { margin-top: 2px; font-size: 12px; color: #ffffff8c; }
+  .clock { display: flex; gap: 8px; align-items: center; font-size: 11px; color: #ffffff8c; font-variant-numeric: tabular-nums; }
+  .clock span { min-width: 32px; }
+  .clock span:last-child { text-align: right; }
+  .line { flex: 1; height: 3px; border-radius: 2px; background: #ffffff33; overflow: hidden; }
+  .line div { height: 100%; width: 0; background: #fff; border-radius: 2px; }
+  .error { color: #9a9aa6; font-size: 13px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<p class="error" id="error" hidden>This overlay link is missing or expired. Copy a new one from Settings in the app.</p>
+<div class="card" id="card">
+  <div class="top">
+    <div class="art" id="art"></div>
+    <div class="text">
+      <p class="title"><span id="title"></span><span class="paused" id="paused" hidden>⏸ PAUSED</span></p>
+      <p class="sub" id="sub"></p>
+    </div>
+  </div>
+  <div class="clock"><span id="position">0:00</span><div class="line"><div id="fill"></div></div><span id="duration">0:00</span></div>
+</div>
+<script nonce="{nonce}">
+"use strict";
+const $ = (id) => document.getElementById(id);
+const token = new URLSearchParams(location.search).get("token") || "";
+const url = `/api/now-playing${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+let state = { track: null, isPlaying: false, currentTime: 0 };
+let polledAt = 0;
+let albumShown = null;
+
+function time(seconds) {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+function render() {
+  const track = state.track;
+  $("card").classList.toggle("on", Boolean(track));
+  if (!track) return;
+  $("title").textContent = track.title || "";
+  $("sub").textContent = `${track.artist?.name ?? ""}  ·  ${track.album?.title ?? ""}`;
+  $("paused").hidden = state.isPlaying;
+  const album = track.album?.hasArtwork ? track.album.id : null;
+  if (album !== albumShown) {
+    albumShown = album;
+    const box = $("art");
+    box.replaceChildren();
+    if (album !== null) {
+      const img = new Image();
+      img.alt = "";
+      img.src = `/api/artwork/${album}`;
+      img.onerror = () => img.remove();
+      box.append(img);
+    }
+  }
+}
+
+// Polling every two seconds would make the bar jump in steps, so the clock runs
+// here between polls and each poll corrects the drift.
+function tick() {
+  const duration = state.track?.duration || 0;
+  const elapsed = state.isPlaying ? (Date.now() - polledAt) / 1000 : 0;
+  const position = duration ? Math.min(state.currentTime + elapsed, duration) : 0;
+  $("position").textContent = time(position);
+  $("duration").textContent = time(duration);
+  $("fill").style.width = duration ? `${(position / duration) * 100}%` : "0";
+}
+
+async function poll() {
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    if (response.status === 401) {
+      $("error").hidden = false;
+      $("card").hidden = true;
+      return;
+    }
+    if (!response.ok) return;
+    state = await response.json();
+    polledAt = Date.now();
+    $("error").hidden = true;
+    $("card").hidden = false;
+    render();
+  } catch {
+    // OBS keeps the source alive across server restarts; just try again.
+  }
+}
+
+poll();
+setInterval(poll, 2000);
+setInterval(tick, 250);
+</script>
+</body>
+</html>

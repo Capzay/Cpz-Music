@@ -1,0 +1,57 @@
+[package]
+name = "cpz-app"
+version = "0.1.6"
+edition = "2024"
+description = "Cpz Music for Linux, Windows and Android"
+
+# Android builds this as a cdylib (`cargo android`, see crates/xtask);
+# the desktop links it into the binary.
+[lib]
+name = "cpz_app"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cpz-music"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.105"
+cpz-core = { path = "../core" }
+dirs = "7.0.0"
+fastrand = "2.5.0"
+hex = "0.4.3"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+reqwest = { version = "0.13.5", default-features = false }
+self-replace = "1.5.1"
+semver = "1.0.28"
+serde_json = "1"
+sha2 = "0.11"
+slint = "1.19.1"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time", "net", "sync", "io-util"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+url = "2"
+webbrowser = "1.2.7"
+
+# The system's media controls: MPRIS over D-Bus (pure Rust, no libdbus) on
+# Linux, the media overlay on Windows.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+souvlaki = { version = "0.9.3", default-features = false, features = ["use_zbus"] }
+
+# The Windows media overlay is tied to the window, so it needs its handle.
+[target.'cfg(target_os = "windows")'.dependencies]
+slint = { version = "1.19.1", features = ["raw-window-handle-06"] }
+raw-window-handle = "0.6"
+# `--install`: the Start menu shortcut, the Installed apps entry, message boxes.
+mslnk = "0.1.8"
+winreg = "0.56"
+windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+slint = { version = "1.19.1", features = ["backend-android-activity-06"] }
+jni = "0.22"
+ndk-context = "0.1"
+paranoid-android = "0.2"
+
+[build-dependencies]
+slint-build = "1.19.1"

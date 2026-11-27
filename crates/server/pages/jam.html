@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Jam</title>
+<style nonce="{nonce}">
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100dvh; background: #0e0e11; color: #f2f2f5;
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  button, input { font: inherit; color: inherit; }
+  .center { min-height: 100dvh; display: grid; place-items: center; padding: 24px; text-align: center; }
+  .card { max-width: 360px; width: 100%; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  p { margin: 0; color: #9a9aa6; }
+  .muted { color: #5c5c68; font-size: 12px; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); }
+  header { margin: 8px 0 18px; }
+  input[type=text], input[type=search] {
+    width: 100%; padding: 10px 12px; border-radius: 8px; outline: none;
+    background: #1d1d24; border: 1px solid #ffffff14;
+  }
+  input:focus { border-color: #8b6cff; }
+  .primary {
+    margin-top: 12px; width: 100%; padding: 11px; border: 0; border-radius: 21px;
+    background: #8b6cff; color: #fff; font-weight: 600; cursor: pointer;
+  }
+  .primary:hover { background: #9d83ff; }
+  ul { list-style: none; margin: 16px 0 0; padding: 0; }
+  .album { border: 1px solid #ffffff14; border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+  .album > button {
+    display: flex; gap: 12px; align-items: center; width: 100%; padding: 10px;
+    background: none; border: 0; text-align: left; cursor: pointer;
+  }
+  .album > button:hover { background: #ffffff0f; }
+  .art { width: 48px; height: 48px; flex: none; border-radius: 6px; background: #1d1d24; object-fit: cover; }
+  .text { min-width: 0; flex: 1; }
+  .title, .sub { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .title { font-weight: 600; }
+  .sub { color: #9a9aa6; font-size: 12px; }
+  .tracks { border-top: 1px solid #ffffff14; padding: 4px 10px 6px; margin: 0; }
+  .track { display: flex; gap: 10px; align-items: center; padding: 6px 0; }
+  .time { color: #5c5c68; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .add {
+    flex: none; padding: 4px 12px; border-radius: 14px; background: none;
+    border: 1px solid #ffffff30; font-size: 12px; cursor: pointer;
+  }
+  .add:hover:not(:disabled) { border-color: #ffffff70; }
+  .add:disabled { opacity: .5; cursor: default; }
+  .leave { margin-top: 28px; background: none; border: 0; color: #5c5c68; font-size: 12px; cursor: pointer; }
+  .leave:hover { color: #f2f2f5; }
+  .bar {
+    position: fixed; inset: auto 0 0 0; background: #15151af2; border-top: 1px solid #ffffff14;
+    backdrop-filter: blur(12px); padding-bottom: env(safe-area-inset-bottom);
+  }
+  .bar .row { display: flex; gap: 12px; align-items: center; max-width: 640px; margin: 0 auto; padding: 10px 16px; }
+  .bar .art { width: 40px; height: 40px; }
+  .progress { height: 2px; background: #ffffff14; }
+  .progress div { height: 100%; background: #8b6cff; width: 0; }
+  .gap { height: 16px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script nonce="{nonce}">
+"use strict";
+const root = document.getElementById("root");
+const params = new URLSearchParams(location.search);
+const ERRORS = {
+  invalid_invite: "That invite link is not valid. Ask for a new one.",
+  jam_closed: "This jam has ended.",
+  removed: "You were removed from this jam.",
+  rate_limited: "Too many attempts. Wait a minute and try again.",
+  signin_failed: "Could not start a guest session. Try again.",
+  host: "This is your own invite link. Run the jam from Settings in the app.",
+};
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "class") node.className = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value);
+  }
+  for (const child of children) node.append(child);
+  return node;
+}
+
+function time(seconds) {
+  const whole = Math.max(0, Math.floor(seconds || 0));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+function art(albumId, hasArtwork) {
+  return hasArtwork
+    ? el("img", { class: "art", src: `/api/artwork/${albumId}`, alt: "", loading: "lazy" })
+    : el("span", { class: "art" });
+}
+
+function message(title, body) {
+  root.replaceChildren(
+    el("div", { class: "center" }, el("div", { class: "card" }, el("h1", {}, title), el("p", {}, body))),
+  );
+}
+
+// ── The name step of an invite link ─────────────────────────────────────────
+
+function nameForm() {
+  const input = el("input", { type: "text", maxlength: "40", placeholder: "Your name", autocomplete: "nickname" });
+  const form = el(
+    "form",
+    {
+      onsubmit: (event) => {
+        event.preventDefault();
+        const next = new URL(location.href);
+        next.searchParams.set("name", input.value.trim());
+        location.replace(next);
+      },
+    },
+    el("h1", {}, "Join the jam"),
+    el("p", {}, "Pick a name so the host knows who is asking."),
+    el("div", { class: "gap" }),
+    input,
+    el("button", { class: "primary", type: "submit" }, "Join"),
+  );
+  root.replaceChildren(el("div", { class: "center" }, el("div", { class: "card" }, form)));
+  input.focus();
+}
+
+// ── The guest view ──────────────────────────────────────────────────────────
+
+let shown = null;
+let bar = null;
+const added = {};
+
+function nowPlaying(state) {
+  const track = state && state.track;
+  if (!track || !bar) {
+    if (bar) bar.root.hidden = true;
+    return;
+  }
+  bar.root.hidden = false;
+  if (bar.id !== track.id) {
+    bar.id = track.id;
+    bar.art.replaceWith((bar.art = art(track.album.id, track.album.hasArtwork)));
+    bar.title.textContent = track.title;
+    bar.artist.textContent = track.artist.name;
+  }
+  bar.duration = track.duration || 0;
+  bar.base = state.currentTime || 0;
+  bar.playing = state.isPlaying;
+  bar.at = Date.now();
+  tick();
+}
+
+function tick() {
+  if (!bar || bar.root.hidden) return;
+  const elapsed = bar.playing ? (Date.now() - bar.at) / 1000 : 0;
+  const position = bar.duration ? Math.min(bar.base + elapsed, bar.duration) : 0;
+  bar.time.textContent = `${time(position)} / ${time(bar.duration)}`;
+  bar.fill.style.width = bar.duration ? `${(position / bar.duration) * 100}%` : "0";
+}
+setInterval(tick, 500);
+
+async function add(track, button) {
+  added[track.id] = "adding";
+  button.disabled = true;
+  button.textContent = "Adding";
+  try {
+    const response = await fetch("/api/jam/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trackId: track.id }),
+    });
+    added[track.id] = response.ok ? "done" : "error";
+    if (response.status === 429) alert("Slow down: you can add five songs a minute.");
+  } catch {
+    added[track.id] = "error";
+  }
+  const status = added[track.id];
+  button.disabled = status === "done";
+  button.textContent = status === "done" ? "Added" : "Retry";
+}
+
+function albumRow(album) {
+  const tracks = el(
+    "ol",
+    { class: "tracks", hidden: "" },
+    ...album.tracks.map((track) => {
+      const button = el("button", { class: "add", onclick: () => add(track, button) }, "Add");
+      return el(
+        "li",
+        { class: "track" },
+        el("span", { class: "text title" }, track.title),
+        el("span", { class: "time" }, time(track.duration)),
+        button,
+      );
+    }),
+  );
+  const head = el(
+    "button",
+    {
+      "aria-expanded": "false",
+      onclick: () => {
+        tracks.hidden = !tracks.hidden;
+        head.setAttribute("aria-expanded", String(!tracks.hidden));
+      },
+    },
+    art(album.id, album.hasArtwork),
+    el("span", { class: "text" }, el("span", { class: "title" }, album.title), el("span", { class: "sub" }, album.artist)),
+  );
+  const row = el("li", { class: "album" }, head, tracks);
+  row.dataset.search = [album.title, album.artist, ...album.tracks.map((t) => t.title)].join("\n").toLowerCase();
+  return row;
+}
+
+function guestView(data) {
+  const list = el("ul", {}, ...data.albums.map(albumRow));
+  const search = el("input", {
+    type: "search",
+    placeholder: "Search",
+    oninput: () => {
+      const term = search.value.trim().toLowerCase();
+      for (const row of list.children) row.hidden = term !== "" && !row.dataset.search.includes(term);
+    },
+  });
+  const leave = el(
+    "button",
+    {
+      class: "leave",
+      onclick: async () => {
+        await fetch("/api/jam/leave", { method: "POST" }).catch(() => {});
+        location.replace("/jam");
+      },
+    },
+    "Leave jam",
+  );
+  bar = {
+    root: el("div", { class: "bar", hidden: "" }),
+    art: el("span", { class: "art" }),
+    title: el("span", { class: "title" }),
+    artist: el("span", { class: "sub" }),
+    time: el("span", { class: "time" }),
+    fill: el("div"),
+    id: null,
+  };
+  bar.root.append(
+    el("div", { class: "row" }, bar.art, el("span", { class: "text" }, bar.title, bar.artist), bar.time),
+    el("div", { class: "progress" }, bar.fill),
+  );
+  root.replaceChildren(
+    el(
+      "main",
+      {},
+      el(
+        "header",
+        {},
+        el("h1", {}, data.hostName ? `${data.hostName}'s jam` : "Jam"),
+        el("p", {}, `You are in as ${data.name}. Pick something to add to the queue.`),
+      ),
+      search,
+      list,
+      leave,
+    ),
+    bar.root,
+  );
+}
+
+async function refresh() {
+  let data;
+  try {
+    const response = await fetch("/api/jam/guest", { cache: "no-store" });
+    if (response.status === 401 || response.status === 403) {
+      data = { status: "none" };
+    } else if (!response.ok) {
+      return;
+    } else {
+      data = await response.json();
+    }
+  } catch {
+    return; // Offline for a moment; the next poll tries again.
+  }
+
+  if (data.status !== shown) {
+    shown = data.status;
+    bar = null;
+    if (data.status === "none") {
+      const error = params.get("error");
+      message("Jam", error ? ERRORS[error] || "Something went wrong." : "Open the invite link you were sent to join.");
+    } else if (data.status === "ended") {
+      message("Jam ended", "The host has closed this jam.");
+    } else if (data.status === "removed") {
+      message("Removed", "The host removed you from this jam.");
+    } else if (data.status === "pending") {
+      message("Waiting to be let in", `${data.name}, the host has to admit you before you can add songs.`);
+    } else if (data.status === "admitted") {
+      guestView(data);
+    }
+  }
+  if (data.status === "admitted") nowPlaying(data.nowPlaying);
+}
+
+if (location.pathname === "/jam/join") {
+  nameForm();
+} else {
+  refresh();
+  // Admitting, removing and ending all show up on the next poll.
+  setInterval(refresh, 5000);
+}
+</script>
+</body>
+</html>

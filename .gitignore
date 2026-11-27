@@ -1,53 +1,17 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Build output
+/target
+# Installers and APKs from scripts/package-client.sh and `cargo android`
+/dist
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files. Secrets live in .env.local; only the placeholder template is tracked.
+# Env files. Secrets live in .env.local; only the placeholder template is tracked.
 .env*
 !.env.example
 
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-# generated Prisma client
-/src/generated
-
-# extracted album art cache
+# Server caches and builds, when run from the repo
 /.artwork
+/releases
 
-# nothing from the music library belongs in git
+# Nothing from the music library belongs in git
 *.mp3
 *.flac
 *.m4a
@@ -56,20 +20,9 @@ next-env.d.ts
 *.wav
 *.aac
 
-# desktop and mobile wrapper build output
-/electron/dist
-/electron/release
-/electron/node_modules
-/mobile/node_modules
-/mobile/dist
-/mobile/android/build
-/mobile/android/app/build
-/mobile/android/.gradle
-/mobile/android/local.properties
-/mobile/android/keystore.properties
-/mobile/android/app/src/main/assets/public
-/mobile/android/app/src/main/assets/capacitor.config.json
-/mobile/android/capacitor-cordova-android-plugins
-# signing material must never be committed
+# Signing material must never be committed
+*.pem
 *.keystore
 *.jks
+
+.DS_Store

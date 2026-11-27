@@ -1,0 +1,76 @@
+// The shapes Rust hands to the screens.
+
+export struct TrackItem {
+    id: int,
+    title: string,
+    artist: string,
+    album: string,
+    album-id: int,
+    artist-id: int,
+    number: string,
+    duration: string,
+    // Playing now, on whichever device is.
+    current: bool,
+    // Downloaded to this device.
+    offline: bool,
+}
+
+// A row in the queue: the song and its album's cover. Kept apart from
+// `TrackItem` because an image cannot cross threads and page rows are built
+// in the background.
+export struct QueueItem {
+    track: TrackItem,
+    art: image,
+    // Its place in the queue itself, which is not its row when shuffled.
+    index: int,
+}
+
+export struct AlbumItem {
+    id: int,
+    title: string,
+    artist: string,
+    year: string,
+    art: image,
+}
+
+export struct ArtistItem {
+    id: int,
+    name: string,
+    detail: string,
+}
+
+export struct DeviceItem {
+    id: string,
+    name: string,
+    platform: string,
+    active: bool,
+    me: bool,
+}
+
+export struct PlaylistItem {
+    // The playlist's uuid.
+    id: string,
+    name: string,
+    detail: string,
+    // The album whose cover stands in for the playlist, or 0.
+    album-id: int,
+    art: image,
+}
+
+// A row in the stats page's most played songs.
+export struct StatTrack {
+    id: int,
+    title: string,
+    artist: string,
+    album-id: int,
+    // "12 plays · 40 min"
+    detail: string,
+    art: image,
+}
+
+// Someone in the jam, or asking to be let in.
+export struct GuestItem {
+    id: string,
+    name: string,
+    pending: bool,
+}

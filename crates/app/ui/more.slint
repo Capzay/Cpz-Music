@@ -1,0 +1,477 @@
+// Stats and Settings: the pages that are not the library.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { App, ArtistItem, StatTrack, GuestItem } from "state.slint";
+import { Cover, PrimaryButton, TextField } from "widgets.slint";
+import { PageHeader, PageState, ArtistRow, SubHeading } from "pages.slint";
+
+// A pill in a row of choices, like the stats period.
+component Chip inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected;
+    callback clicked;
+
+    height: 32px;
+    width: label.preferred-width + 28px;
+    border-radius: 16px;
+    background: root.selected ? Theme.text : (touch.has-hover ? Theme.hover : Theme.raised);
+    label := Text {
+        text: root.text;
+        color: root.selected ? Theme.bg : Theme.text;
+        font-size: Theme.size-small + 1px;
+        font-weight: 600;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component Figure inherits Rectangle {
+    in property <string> value;
+    in property <string> label;
+
+    height: 84px;
+    border-radius: Theme.radius + 4px;
+    background: Theme.panel;
+    border-width: 1px;
+    border-color: Theme.line;
+    VerticalLayout {
+        padding: 14px;
+        padding-left: 16px;
+        alignment: center;
+        spacing: 4px;
+        Text {
+            text: root.value;
+            color: Theme.text;
+            font-size: Theme.compact ? 20px : 24px;
+            font-weight: 700;
+            overflow: elide;
+        }
+        Text {
+            text: root.label;
+            color: Theme.muted;
+            font-size: Theme.size-small;
+        }
+    }
+}
+
+component StatTrackRow inherits Rectangle {
+    in property <StatTrack> track;
+    in property <int> rank;
+    callback clicked;
+
+    height: 60px;
+    border-radius: Theme.radius;
+    background: touch.has-hover ? Theme.hover : transparent;
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 12px;
+        spacing: 12px;
+        Text {
+            width: 22px;
+            text: root.rank;
+            color: Theme.faint;
+            font-size: Theme.size-body;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+        Cover {
+            art: root.track.art;
+            width: 44px;
+            height: 44px;
+            y: (parent.height - self.height) / 2;
+            corner: 4px;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+            Text {
+                text: root.track.title;
+                color: Theme.text;
+                font-size: Theme.size-body;
+                font-weight: 600;
+                overflow: elide;
+            }
+            Text {
+                text: root.track.artist;
+                color: Theme.muted;
+                font-size: Theme.size-small;
+                overflow: elide;
+            }
+        }
+        Text {
+            text: root.track.detail;
+            color: Theme.muted;
+            font-size: Theme.size-small;
+            vertical-alignment: center;
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component StatsPage inherits Rectangle {
+    ScrollView {
+        VerticalLayout {
+            alignment: start;
+            padding: Theme.page-padding;
+            spacing: 16px;
+            PageHeader {
+                title: "Stats";
+                detail: "What you've listened to on every device.";
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                for choice in [
+                    { id: "week", label: "7 days" },
+                    { id: "month", label: "This month" },
+                    { id: "year", label: "This year" },
+                    { id: "all", label: "All time" },
+                ]: Chip {
+                    text: choice.label;
+                    selected: App.stats-period == choice.id;
+                    clicked => {
+                        App.stats-period = choice.id;
+                        App.stats-period-picked(choice.id);
+                    }
+                }
+            }
+            if App.error == "": GridLayout {
+                spacing: 10px;
+                Row {
+                    Figure { value: App.stats-time; label: "Listening time"; }
+                    Figure { value: App.stats-plays; label: "Plays"; }
+                    if !Theme.compact: Figure { value: App.stats-songs; label: "Songs"; }
+                    if !Theme.compact: Figure { value: App.stats-artist-count; label: "Artists"; }
+                }
+                if Theme.compact: Row {
+                    Figure { value: App.stats-songs; label: "Songs"; }
+                    Figure { value: App.stats-artist-count; label: "Artists"; }
+                }
+            }
+            if App.stats-tracks.length > 0: VerticalLayout {
+                spacing: 2px;
+                SubHeading { text: "Top songs"; }
+                Rectangle { height: 8px; }
+                for track[i] in App.stats-tracks: StatTrackRow {
+                    track: track;
+                    rank: i + 1;
+                    clicked => { App.open-album(track.album-id); }
+                }
+            }
+            if App.stats-artists.length > 0: VerticalLayout {
+                spacing: 2px;
+                SubHeading { text: "Top artists"; }
+                Rectangle { height: 8px; }
+                for artist in App.stats-artists: ArtistRow {
+                    artist: artist;
+                    clicked => { App.open-artist(artist.id); }
+                }
+            }
+            if !App.busy && App.error == "" && App.stats-tracks.length == 0: Rectangle {
+                height: 160px;
+                Text {
+                    text: "Nothing played in this time yet.";
+                    color: Theme.muted;
+                    font-size: Theme.size-body;
+                }
+            }
+        }
+    }
+    if App.error != "": PageState {
+        empty: true;
+    }
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+
+component Section inherits Rectangle {
+    in property <string> title;
+    in property <string> body;
+
+    height: layout.preferred-height;
+    background: Theme.panel;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: Theme.line;
+    layout := VerticalLayout {
+        padding: Theme.compact ? 16px : 22px;
+        spacing: 12px;
+        Text {
+            text: root.title;
+            color: Theme.text;
+            font-size: Theme.size-title + 2px;
+            font-weight: 700;
+        }
+        if root.body != "": Text {
+            text: root.body;
+            color: Theme.muted;
+            font-size: Theme.size-body;
+            wrap: word-wrap;
+        }
+        @children
+    }
+}
+
+// A quiet text button: secondary actions next to a primary one.
+component LinkButton inherits Text {
+    in property <bool> danger;
+    callback clicked;
+    color: touch.has-hover ? (root.danger ? Theme.danger : Theme.text) : Theme.muted;
+    font-size: Theme.size-small + 1px;
+    vertical-alignment: center;
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// A link to hand to someone else, with a button that copies it.
+component CopyField inherits HorizontalLayout {
+    in property <string> value;
+    property <bool> copied;
+    spacing: 10px;
+    Rectangle {
+        height: 42px;
+        // A link is far wider than the page; it is cut off, not allowed to
+        // widen the page.
+        min-width: 80px;
+        preferred-width: 200px;
+        horizontal-stretch: 1;
+        border-radius: Theme.radius;
+        background: Theme.raised;
+        border-width: 1px;
+        border-color: Theme.line;
+        clip: true;
+        field := TextInput {
+                x: 12px;
+                width: parent.width - 24px;
+                height: parent.height;
+                text: root.value;
+                read-only: true;
+                single-line: true;
+                color: Theme.muted;
+                font-size: Theme.size-small;
+                vertical-alignment: center;
+                selection-background-color: Theme.accent.with-alpha(0.4);
+        }
+    }
+    PrimaryButton {
+        text: root.copied ? "Copied" : "Copy";
+        clicked => {
+            field.select-all();
+            field.copy();
+            field.clear-selection();
+            root.copied = true;
+        }
+    }
+    changed value => { root.copied = false; }
+}
+
+component GuestRow inherits HorizontalLayout {
+    in property <GuestItem> guest;
+    spacing: 14px;
+    height: 36px;
+    Text {
+        text: root.guest.name;
+        color: Theme.text;
+        font-size: Theme.size-body;
+        vertical-alignment: center;
+        overflow: elide;
+        horizontal-stretch: 1;
+    }
+    if root.guest.pending: LinkButton {
+        text: "Let in";
+        clicked => { App.admit(root.guest.id); }
+    }
+    LinkButton {
+        text: root.guest.pending ? "Deny" : "Remove";
+        danger: true;
+        clicked => { App.kick(root.guest.id); }
+    }
+}
+
+// A label with an on/off switch.
+component Toggle inherits HorizontalLayout {
+    in property <string> text;
+    in property <bool> on;
+    callback toggled(bool);
+    spacing: 14px;
+    Text {
+        text: root.text;
+        color: Theme.text;
+        font-size: Theme.size-body;
+        vertical-alignment: center;
+        wrap: word-wrap;
+        horizontal-stretch: 1;
+    }
+    Rectangle {
+        width: 42px;
+        height: 24px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 12px;
+        background: root.on ? Theme.accent : Theme.raised;
+        border-width: root.on ? 0 : 1px;
+        border-color: Theme.line;
+        animate background { duration: 120ms; }
+        Rectangle {
+            x: root.on ? parent.width - self.width - 3px : 3px;
+            width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            background: white;
+            animate x { duration: 120ms; }
+        }
+        TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.toggled(!root.on); }
+        }
+    }
+}
+
+export component SettingsPage inherits Rectangle {
+    property <bool> renaming;
+
+    ScrollView {
+        VerticalLayout {
+            alignment: start;
+            padding: Theme.page-padding;
+            spacing: 16px;
+            PageHeader {
+                title: "Settings";
+            }
+            if App.error != "": Text {
+                text: App.error;
+                color: Theme.danger;
+                font-size: Theme.size-body;
+                wrap: word-wrap;
+            }
+            if App.secret-missing: Text {
+                text: "APP_SECRET isn't set on the server, so it can't make invite or overlay links. Set one (openssl rand -hex 32) and restart it.";
+                color: Theme.danger;
+                font-size: Theme.size-body;
+                wrap: word-wrap;
+            }
+
+            if !App.jam-running: Section {
+                title: "Jam";
+                body: "Let people add songs to your queue from their own phones. They never see your playlists, stats or settings.";
+                HorizontalLayout {
+                    spacing: 10px;
+                    host := TextField {
+                        placeholder: "Your name (optional)";
+                        font-size: Theme.size-body;
+                        max-width: 320px;
+                        accepted(text) => { App.start-jam(text); }
+                    }
+                    PrimaryButton {
+                        text: "Start jam";
+                        busy: App.busy;
+                        clicked => {
+                            host.commit();
+                            App.start-jam(host.text);
+                        }
+                    }
+                    if !Theme.compact: Rectangle { horizontal-stretch: 1; }
+                }
+            }
+            if App.jam-running: Section {
+                title: App.jam-title;
+                body: "Share this link. Anyone who opens it can ask to join, and you let them in here.";
+                if App.invite-url != "": CopyField { value: App.invite-url; }
+                HorizontalLayout {
+                    spacing: 20px;
+                    alignment: start;
+                    LinkButton {
+                        text: "Replace link";
+                        clicked => { App.new-invite(); }
+                    }
+                    LinkButton {
+                        text: "End jam";
+                        danger: true;
+                        clicked => { App.stop-jam(); }
+                    }
+                }
+                if App.guests.length == 0: Text {
+                    text: "Nobody has joined yet.";
+                    color: Theme.faint;
+                    font-size: Theme.size-body;
+                }
+                for guest in App.guests: GuestRow { guest: guest; }
+            }
+
+            Section {
+                title: "OBS overlay";
+                body: "Add this as a browser source in OBS to show the song playing over your stream. The link works without signing in, so treat it like a password.";
+                if App.overlay-url != "": CopyField { value: App.overlay-url; }
+            }
+
+            Section {
+                title: "This device";
+                body: "The name other devices see when you pick where to play.";
+                if !root.renaming: HorizontalLayout {
+                    spacing: 20px;
+                    Text {
+                        text: App.device-name;
+                        color: Theme.text;
+                        font-size: Theme.size-body;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    LinkButton {
+                        text: "Rename";
+                        clicked => { root.renaming = true; }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                }
+                if root.renaming: HorizontalLayout {
+                    spacing: 10px;
+                    name := TextField {
+                        text: App.device-name;
+                        font-size: Theme.size-body;
+                        max-width: 320px;
+                        init => { self.focus-input(); }
+                        accepted(text) => {
+                            App.rename-device(text);
+                            root.renaming = false;
+                        }
+                    }
+                    PrimaryButton {
+                        text: "Save";
+                        clicked => {
+                            name.commit();
+                            App.rename-device(name.text);
+                            root.renaming = false;
+                        }
+                    }
+                    if !Theme.compact: Rectangle { horizontal-stretch: 1; }
+                }
+                if App.desktop: Toggle {
+                    text: "Show what's playing on Discord";
+                    on: App.discord;
+                    toggled(on) => { App.set-discord(on); }
+                }
+            }
+
+            Section {
+                title: "Account";
+                body: "Version " + App.version + " · " + App.server-url;
+                HorizontalLayout {
+                    alignment: start;
+                    LinkButton {
+                        text: "Sign out";
+                        danger: true;
+                        clicked => { App.sign-out(); }
+                    }
+                }
+            }
+        }
+    }
+}

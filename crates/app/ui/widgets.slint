@@ -1,0 +1,444 @@
+import { Theme } from "theme.slint";
+import { TrackItem, PlaylistItem } from "types.slint";
+
+export { TrackItem }
+
+// An icon that is also a button.
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <length> size: 20px;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    in property <color> tint: active ? Theme.accent : (touch.has-hover && enabled ? Theme.text : Theme.muted);
+    out property <bool> has-hover: touch.has-hover;
+    callback clicked;
+
+    width: self.size + 16px;
+    height: self.size + 16px;
+    border-radius: self.height / 2;
+    background: touch.pressed && enabled ? Theme.hover : transparent;
+    opacity: enabled ? 1 : 0.4;
+
+    Image {
+        source: root.icon;
+        width: root.size;
+        height: root.size;
+        colorize: root.tint;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// The round play button in the player bar and on album pages.
+export component PlayButton inherits Rectangle {
+    in property <bool> playing;
+    in property <length> size: 40px;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    width: self.size;
+    height: self.size;
+    border-radius: self.size / 2;
+    background: !enabled ? Theme.raised : (touch.has-hover ? Theme.accent-hover : Theme.accent);
+    animate background { duration: 120ms; }
+
+    Image {
+        source: root.playing ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
+        width: root.size * 0.42;
+        height: root.size * 0.42;
+        // The play triangle's visual centre sits right of its box.
+        x: (parent.width - self.width) / 2 + (root.playing ? 0 : root.size * 0.03);
+        colorize: white;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component PrimaryButton inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon;
+    in property <bool> enabled: true;
+    in property <bool> busy;
+    callback clicked;
+
+    height: 42px;
+    // As wide as its label, not as wide as the row it sits in.
+    min-width: label.preferred-width + (root.has-icon ? 60px : 40px);
+    preferred-width: self.min-width;
+    horizontal-stretch: 0;
+    border-radius: 21px;
+    background: !enabled || busy ? Theme.raised : (touch.has-hover ? Theme.accent-hover : Theme.accent);
+
+    HorizontalLayout {
+        alignment: center;
+        spacing: 10px;
+        if root.has-icon: Image {
+            source: root.icon;
+            width: 18px;
+            colorize: white;
+        }
+        label := Text {
+            text: root.busy ? "Working…" : root.text;
+            color: white;
+            font-size: Theme.size-body;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled && !root.busy;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Album art with rounded corners, or a placeholder until it arrives.
+export component Cover inherits Rectangle {
+    in property <image> art;
+    in property <length> corner: 6px;
+
+    border-radius: self.corner;
+    clip: true;
+    background: Theme.raised;
+
+    if root.art.width == 0: Image {
+        source: @image-url("icons/music.svg");
+        width: min(parent.width, parent.height) * 0.36;
+        colorize: Theme.faint;
+    }
+    Image {
+        source: root.art;
+        width: parent.width;
+        height: parent.height;
+        image-fit: cover;
+    }
+}
+
+// A thin bar that can be dragged or clicked to seek or set a level.
+export component SeekBar inherits Rectangle {
+    // 0 to 1.
+    in property <float> value;
+    // Shown faintly behind the value, such as how much has downloaded.
+    in property <float> buffered;
+    in property <bool> enabled: true;
+    callback changed(float);
+
+    property <float> dragged: max(0, min(1, touch.mouse-x / max(1px, self.width)));
+    property <float> shown: touch.pressed ? dragged : max(0, min(1, value));
+
+    height: 16px;
+
+    Rectangle {
+        y: (parent.height - self.height) / 2;
+        height: touch.has-hover || touch.pressed ? 5px : 4px;
+        border-radius: self.height / 2;
+        background: #ffffff1f;
+
+        Rectangle {
+            x: 0;
+            width: parent.width * max(0, min(1, root.buffered));
+            border-radius: parent.border-radius;
+            background: #ffffff1a;
+        }
+        Rectangle {
+            x: 0;
+            width: parent.width * root.shown;
+            border-radius: parent.border-radius;
+            background: touch.has-hover || touch.pressed ? Theme.accent : Theme.text;
+        }
+    }
+    if (touch.has-hover || touch.pressed) && root.enabled: Rectangle {
+        x: parent.width * root.shown - self.width / 2;
+        y: (parent.height - self.height) / 2;
+        width: 12px;
+        height: 12px;
+        border-radius: 6px;
+        background: white;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                root.changed(root.dragged);
+            }
+        }
+    }
+}
+
+export component NavItem inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> selected;
+    callback clicked;
+
+    height: 38px;
+    border-radius: Theme.radius;
+    background: selected ? Theme.raised : (touch.has-hover ? Theme.hover : transparent);
+
+    HorizontalLayout {
+        padding-left: 12px;
+        spacing: 12px;
+        Image {
+            source: root.icon;
+            width: 18px;
+            colorize: root.selected ? Theme.accent : Theme.muted;
+        }
+        Text {
+            text: root.text;
+            color: root.selected ? Theme.text : Theme.muted;
+            font-size: Theme.size-body;
+            font-weight: root.selected ? 600 : 400;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// One song in a list. A click or tap plays it; right-click, a long press or
+// the "more" button opens what else can be done with it.
+export component TrackRow inherits Rectangle {
+    in property <TrackItem> track;
+    in property <bool> show-album;
+    // Not downloaded while offline: shown but not playable.
+    in property <bool> unavailable;
+    // In a playlist, the row can also be moved and removed.
+    in property <bool> in-playlist;
+    // Leave the artist out of the second line, as on an artist's own page.
+    in property <bool> hide-artist;
+    // A small album cover after the number, for lists that mix albums.
+    in property <bool> show-cover;
+    in property <image> cover;
+    in property <bool> first;
+    in property <bool> last;
+    in property <[PlaylistItem]> playlists;
+    callback play;
+    // What was picked from the menu, and for "add-to" the playlist's id.
+    callback action(string, string);
+
+    height: root.show-cover ? 58px : 48px;
+    border-radius: 6px;
+    background: (touch.has-hover || more.has-hover) && !unavailable ? Theme.hover : transparent;
+    opacity: unavailable ? 0.4 : 1;
+
+    menu := ContextMenuArea {
+        Menu {
+            MenuItem {
+                title: "Play next";
+                enabled: !root.unavailable;
+                activated => { root.action("play-next", ""); }
+            }
+            MenuItem {
+                title: "Add to queue";
+                enabled: !root.unavailable;
+                activated => { root.action("queue", ""); }
+            }
+            Menu {
+                title: "Add to playlist";
+                MenuItem {
+                    title: "New playlist";
+                    activated => { root.action("new-playlist", ""); }
+                }
+                MenuSeparator { }
+                for playlist in root.playlists: MenuItem {
+                    title: playlist.name;
+                    activated => { root.action("add-to", playlist.id); }
+                }
+            }
+            MenuItem {
+                title: root.track.offline ? "Remove download" : "Download";
+                activated => { root.action(root.track.offline ? "remove-download" : "download", ""); }
+            }
+            MenuSeparator { }
+            MenuItem {
+                title: "Go to album";
+                activated => { root.action("album", ""); }
+            }
+            MenuItem {
+                title: "Go to artist";
+                activated => { root.action("artist", ""); }
+            }
+            if root.in-playlist: MenuSeparator { }
+            if root.in-playlist: MenuItem {
+                title: "Move up";
+                enabled: !root.first;
+                activated => { root.action("up", ""); }
+            }
+            if root.in-playlist: MenuItem {
+                title: "Move down";
+                enabled: !root.last;
+                activated => { root.action("down", ""); }
+            }
+            if root.in-playlist: MenuItem {
+                title: "Remove from playlist";
+                activated => { root.action("remove", ""); }
+            }
+        }
+
+        touch := TouchArea {
+            enabled: !root.unavailable;
+            mouse-cursor: pointer;
+            clicked => { root.play(); }
+        }
+
+        HorizontalLayout {
+            padding-left: Theme.compact ? 4px : 12px;
+            padding-right: Theme.compact ? 0px : 8px;
+            spacing: Theme.compact ? 12px : 16px;
+
+            // On a phone the cover says enough; the number only takes room.
+            if !(Theme.compact && root.show-cover): Text {
+                width: Theme.compact ? 20px : 28px;
+                text: root.track.number;
+                color: root.track.current ? Theme.accent : Theme.faint;
+                font-size: Theme.size-body;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+            if root.show-cover: Cover {
+                art: root.cover;
+                width: 42px;
+                height: 42px;
+                corner: 4px;
+                y: (parent.height - self.height) / 2;
+            }
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                horizontal-stretch: 1;
+                Text {
+                    text: root.track.title;
+                    color: root.track.current ? Theme.accent : Theme.text;
+                    font-size: Theme.size-body;
+                    font-weight: root.track.current ? 600 : 400;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.hide-artist ? root.track.album : (root.show-album ? root.track.artist + "  ·  " + root.track.album : root.track.artist);
+                    color: Theme.muted;
+                    font-size: Theme.size-small;
+                    overflow: elide;
+                }
+            }
+            if !Theme.compact || root.track.offline: Rectangle {
+                width: 16px;
+                horizontal-stretch: 0;
+                if root.track.offline: Image {
+                    source: @image-url("icons/check.svg");
+                    width: 14px;
+                    colorize: Theme.accent;
+                }
+            }
+            Text {
+                text: root.track.duration;
+                color: Theme.muted;
+                font-size: Theme.size-small;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+                min-width: 40px;
+            }
+            more := IconButton {
+                icon: @image-url("icons/more.svg");
+                size: 16px;
+                y: (parent.height - self.height) / 2;
+                opacity: Theme.compact || touch.has-hover || self.has-hover ? 1 : 0;
+                clicked => { menu.show({ x: self.x, y: self.y + self.height }); }
+            }
+        }
+    }
+}
+
+// Centred message for empty and failed states.
+export component Notice inherits VerticalLayout {
+    in property <string> title;
+    in property <string> body;
+    alignment: center;
+    spacing: 8px;
+    Text {
+        text: root.title;
+        color: Theme.text;
+        font-size: Theme.size-title;
+        font-weight: 600;
+        horizontal-alignment: center;
+    }
+    Text {
+        text: root.body;
+        color: Theme.muted;
+        font-size: Theme.size-body;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+}
+
+// A single-line text box in the app's own style.
+export component TextField inherits Rectangle {
+    in property <string> placeholder;
+    in property <length> font-size: Theme.size-title;
+    in-out property <string> text;
+    in property <InputMethodHints> hints;
+    // The word the phone keyboard is still composing: Android only adds it to `text`
+    // on space or when the box loses focus.
+    out property <string> composing: input.preedit-text;
+    callback edited(string);
+    callback accepted(string);
+
+    public function focus-input() {
+        input.focus();
+    }
+
+    // Move the composing word into `text`. Call before reading `text` from a button.
+    public function commit() {
+        input.clear-focus();
+    }
+
+    height: 44px;
+    border-radius: Theme.radius;
+    background: Theme.raised;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.accent : Theme.line;
+    animate border-color { duration: 120ms; }
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        Rectangle {
+            input := TextInput {
+                text <=> root.text;
+                color: Theme.text;
+                font-size: root.font-size;
+                vertical-alignment: center;
+                single-line: true;
+                input-method-hints: root.hints;
+                // Slint paints the word the keyboard is still composing as a selection.
+                // Hide that while composing; alpha 0 rather than `transparent`, because
+                // Android draws the caret in this colour at full alpha.
+                selection-background-color: self.preedit-text != "" ? Theme.accent.with-alpha(0) : Theme.accent.with-alpha(0.4);
+                selection-foreground-color: Theme.text;
+                edited => { root.edited(self.text); }
+                accepted => { root.accepted(self.text); }
+            }
+            if root.text == "" && input.preedit-text == "": Text {
+                x: 0;
+                text: root.placeholder;
+                color: Theme.faint;
+                font-size: root.font-size;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

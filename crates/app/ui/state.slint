@@ -1,0 +1,166 @@
+// The UI's state, filled in from Rust. Screens read these and call back.
+
+import { TrackItem, QueueItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, StatTrack, GuestItem } from "types.slint";
+
+export { TrackItem, QueueItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, StatTrack, GuestItem }
+
+export global App {
+    // setup | signin | loading | albums | artists | album | artist | search
+    // | playlists | playlist | downloads | stats | settings
+    in-out property <string> page: "loading";
+    in property <bool> can-go-back;
+    // Set while a request for the current page is out.
+    in property <bool> busy;
+    // Shown instead of a page's content when it could not load.
+    in property <string> error;
+    // The server could not be reached; downloads still play.
+    in property <bool> offline;
+    // The page list the queue was played from ("album", "artist", "playlist",
+    // "downloads"), or empty. Its play button then pauses instead.
+    in property <string> playing-source;
+
+    in property <[AlbumItem]> albums;
+    in property <[ArtistItem]> artists;
+
+    in property <AlbumItem> album;
+    in property <string> album-detail;
+    in property <[TrackItem]> album-tracks;
+
+    in property <string> artist-name;
+    in property <string> artist-detail;
+    in property <[AlbumItem]> artist-albums;
+    in property <[TrackItem]> artist-tracks;
+
+    in-out property <string> search-text;
+    in property <[TrackItem]> search-tracks;
+    in property <[AlbumItem]> search-albums;
+    in property <[ArtistItem]> search-artists;
+
+    in property <[PlaylistItem]> playlists;
+    in property <PlaylistItem> playlist;
+    in property <[TrackItem]> playlist-tracks;
+    // Each song's album cover, row for row with `playlist-tracks`.
+    in property <[image]> playlist-covers;
+
+    in property <[TrackItem]> downloads;
+    in property <string> downloads-detail;
+    // "Downloading 3 of 12", or empty when nothing is.
+    in property <string> download-status;
+
+    // week | month | year | all
+    in-out property <string> stats-period: "year";
+    in property <string> stats-time;
+    in property <string> stats-plays;
+    in property <string> stats-songs;
+    in property <string> stats-artist-count;
+    in property <[StatTrack]> stats-tracks;
+    in property <[ArtistItem]> stats-artists;
+
+    // Settings: the jam, the OBS overlay and this device.
+    in property <bool> jam-running;
+    in property <string> jam-title;
+    in property <string> invite-url;
+    in property <[GuestItem]> guests;
+    in property <string> overlay-url;
+    // APP_SECRET is unset on the server, so it cannot sign links.
+    in property <bool> secret-missing;
+    in property <string> device-name;
+    // Desktop only: Discord and the system's media controls.
+    in property <bool> desktop;
+    in property <bool> discord;
+
+    // This build's version, and a newer one the server has, or empty.
+    in property <string> version;
+    in property <string> update-version;
+    in property <bool> update-busy;
+    in property <string> update-error;
+
+    in-out property <string> server-url;
+    in property <string> setup-error;
+    in property <bool> signing-in;
+
+    callback navigate(string);
+    callback back();
+    callback open-album(int);
+    callback open-artist(int);
+    // Plays a list from the page it is on, starting at a track.
+    callback play-list(string, int);
+    callback shuffle-list(string);
+    callback search(string);
+    callback connect(string);
+    callback sign-in();
+    callback cancel-sign-in();
+    callback sign-out();
+    callback retry();
+
+    // A track's menu: the list it is in, its row, what was picked, and for
+    // "add-to" the playlist's id.
+    callback track-action(string, int, string, string);
+    // The album page's menu, for the whole album.
+    callback album-action(string, string);
+    callback open-playlist(string);
+    // Makes a playlist and opens it.
+    callback create-playlist(string);
+    callback rename-playlist(string);
+    callback delete-playlist();
+    callback clear-downloads();
+    // Downloads the newer build, swaps it in and restarts.
+    callback install-update();
+    callback stats-period-picked(string);
+    callback start-jam(string);
+    callback stop-jam();
+    callback new-invite();
+    callback admit(string);
+    callback kick(string);
+    callback rename-device(string);
+    callback set-discord(bool);
+    // Android back with nothing left to go back to: send the app to the background.
+    callback leave();
+}
+
+export global Playback {
+    in property <bool> has-track;
+    in property <string> title;
+    in property <string> artist;
+    in property <string> album-title;
+    in property <int> album-id;
+    in property <image> art;
+
+    in property <bool> playing;
+    in property <bool> loading;
+    in property <float> position;
+    in property <float> duration;
+    in property <string> position-text: "0:00";
+    in property <string> duration-text: "0:00";
+    in property <float> buffered: 1;
+    in property <string> error;
+
+    in property <bool> shuffle;
+    // 0 off, 1 all, 2 one.
+    in property <int> repeat;
+    in property <float> volume: 1;
+
+    in property <[QueueItem]> queue;
+    in property <int> queue-index;
+
+    in property <[DeviceItem]> devices;
+    // Another device is playing and this one is its remote.
+    in property <bool> remote;
+    in property <string> active-device;
+    in property <bool> connected;
+
+    in-out property <bool> show-queue;
+    in-out property <bool> show-devices;
+
+    callback toggle();
+    callback next();
+    callback prev();
+    // 0 to 1 of the track.
+    callback seek(float);
+    callback set-volume(float);
+    callback toggle-shuffle();
+    callback cycle-repeat();
+    callback jump-to(int);
+    callback remove(int);
+    callback claim();
+}

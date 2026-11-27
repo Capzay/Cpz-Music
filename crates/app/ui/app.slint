@@ -1,0 +1,576 @@
+import { Spinner } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, StatTrack, GuestItem } from "state.slint";
+import { NavItem, IconButton, PrimaryButton } from "widgets.slint";
+import { TrackItem, QueueItem } from "types.slint";
+import { AlbumsPage, ArtistsPage, AlbumPage, ArtistPage, SearchPage, PlaylistsPage, PlaylistPage, DownloadsPage, SetupPage, SignInPage } from "pages.slint";
+import { PlayerBar, QueuePanel, DevicesPanel, MiniPlayer, NowPlaying } from "player.slint";
+import { StatsPage, SettingsPage } from "more.slint";
+
+export { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, TrackItem, QueueItem, StatTrack, GuestItem }
+
+component Sidebar inherits Rectangle {
+    background: Theme.panel;
+    width: 220px;
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        background: Theme.line;
+    }
+
+    VerticalLayout {
+        padding: 14px;
+        padding-top: 20px;
+        spacing: 4px;
+
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-bottom: 18px;
+            spacing: 10px;
+            Rectangle {
+                width: 30px;
+                height: 30px;
+                border-radius: 8px;
+                background: Theme.accent;
+                Image {
+                    source: @image-url("icons/music.svg");
+                    width: 17px;
+                    colorize: white;
+                }
+            }
+            Text {
+                text: "Cpz Music";
+                color: Theme.text;
+                font-size: 17px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+
+        NavItem {
+            text: "Albums";
+            icon: @image-url("icons/album.svg");
+            selected: App.page == "albums";
+            clicked => { App.navigate("albums"); }
+        }
+        NavItem {
+            text: "Artists";
+            icon: @image-url("icons/artist.svg");
+            selected: App.page == "artists";
+            clicked => { App.navigate("artists"); }
+        }
+        NavItem {
+            text: "Playlists";
+            icon: @image-url("icons/playlist.svg");
+            selected: App.page == "playlists" || App.page == "playlist";
+            clicked => { App.navigate("playlists"); }
+        }
+        NavItem {
+            text: "Downloads";
+            icon: @image-url("icons/download.svg");
+            selected: App.page == "downloads";
+            clicked => { App.navigate("downloads"); }
+        }
+        NavItem {
+            text: "Search";
+            icon: @image-url("icons/search.svg");
+            selected: App.page == "search";
+            clicked => { App.navigate("search"); }
+        }
+        NavItem {
+            text: "Stats";
+            icon: @image-url("icons/stats.svg");
+            selected: App.page == "stats";
+            clicked => { App.navigate("stats"); }
+        }
+        NavItem {
+            text: "Settings";
+            icon: @image-url("icons/settings.svg");
+            selected: App.page == "settings";
+            clicked => { App.navigate("settings"); }
+        }
+
+        Rectangle { }
+
+        if App.download-status != "": HorizontalLayout {
+            padding-left: 8px;
+            padding-bottom: 6px;
+            spacing: 8px;
+            Image {
+                source: @image-url("icons/download.svg");
+                width: 14px;
+                colorize: Theme.accent;
+            }
+            Text {
+                text: App.download-status;
+                color: Theme.muted;
+                font-size: Theme.size-small;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+        if App.offline: Rectangle {
+            height: 34px;
+            border-radius: Theme.radius;
+            background: offline-touch.has-hover ? #ff6b6b33 : #ff6b6b1f;
+            Text {
+                text: "Offline: downloads only";
+                color: Theme.danger;
+                font-size: Theme.size-small;
+            }
+            offline-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { App.navigate("downloads"); }
+            }
+        }
+        Text {
+            text: "Version " + App.version;
+            color: Theme.faint;
+            font-size: Theme.size-small - 1px;
+        }
+        Text {
+            text: "Sign out";
+            color: signout.has-hover ? Theme.text : Theme.faint;
+            font-size: Theme.size-small;
+            horizontal-alignment: left;
+            signout := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { App.sign-out(); }
+            }
+        }
+    }
+}
+
+// ── Phone layout ────────────────────────────────────────────────────────────
+
+component Tab inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> selected;
+    callback clicked;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+    VerticalLayout {
+        alignment: center;
+        spacing: 4px;
+        HorizontalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                width: 22px;
+                height: 22px;
+                colorize: root.selected ? Theme.accent : Theme.muted;
+            }
+        }
+        Text {
+            text: root.text;
+            color: root.selected ? Theme.text : Theme.muted;
+            font-size: 11px;
+            font-weight: root.selected ? 600 : 400;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+component TabBar inherits Rectangle {
+    height: 62px;
+    background: Theme.panel;
+    Rectangle {
+        y: 0;
+        height: 1px;
+        background: Theme.line;
+    }
+    HorizontalLayout {
+        Tab {
+            text: "Albums";
+            icon: @image-url("icons/album.svg");
+            selected: App.page == "albums" || App.page == "album";
+            clicked => { App.navigate("albums"); }
+        }
+        Tab {
+            text: "Artists";
+            icon: @image-url("icons/artist.svg");
+            selected: App.page == "artists" || App.page == "artist";
+            clicked => { App.navigate("artists"); }
+        }
+        Tab {
+            text: "Playlists";
+            icon: @image-url("icons/playlist.svg");
+            selected: App.page == "playlists" || App.page == "playlist";
+            clicked => { App.navigate("playlists"); }
+        }
+        Tab {
+            text: "Downloads";
+            icon: @image-url("icons/download.svg");
+            selected: App.page == "downloads";
+            clicked => { App.navigate("downloads"); }
+        }
+        Tab {
+            text: "Search";
+            icon: @image-url("icons/search.svg");
+            selected: App.page == "search";
+            clicked => { App.navigate("search"); }
+        }
+    }
+}
+
+// The phone's top line: back, the app's name and a menu for the rest of what
+// the sidebar holds on the desktop.
+component TopBar inherits Rectangle {
+    callback menu;
+    height: 52px;
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 6px;
+        spacing: 6px;
+        if App.can-go-back: IconButton {
+            icon: @image-url("icons/back.svg");
+            size: 22px;
+            y: (parent.height - self.height) / 2;
+            clicked => { App.back(); }
+        }
+        if !App.can-go-back: HorizontalLayout {
+            padding-left: 10px;
+            spacing: 10px;
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 8px;
+                background: Theme.accent;
+                Image {
+                    source: @image-url("icons/music.svg");
+                    width: 16px;
+                    colorize: white;
+                }
+            }
+            Text {
+                text: "Cpz Music";
+                color: Theme.text;
+                font-size: 17px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        if App.offline: Text {
+            text: "Offline";
+            color: Theme.danger;
+            font-size: Theme.size-small;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        if App.download-status != "": Image {
+            source: @image-url("icons/download.svg");
+            width: 16px;
+            height: 16px;
+            y: (parent.height - self.height) / 2;
+            colorize: Theme.accent;
+        }
+        IconButton {
+            icon: @image-url("icons/more.svg");
+            size: 20px;
+            y: (parent.height - self.height) / 2;
+            clicked => { root.menu(); }
+        }
+    }
+}
+
+component AccountMenu inherits Rectangle {
+    callback close;
+    // Taps outside the card close it.
+    TouchArea {
+        clicked => { root.close(); }
+    }
+    Rectangle {
+        x: parent.width - self.width - 10px;
+        y: 50px;
+        width: 240px;
+        height: layout.preferred-height;
+        background: Theme.raised;
+        border-radius: 12px;
+        border-width: 1px;
+        border-color: Theme.line;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #00000099;
+        // Taps on the card itself stay on it.
+        TouchArea { }
+        layout := VerticalLayout {
+            padding: 16px;
+            spacing: 12px;
+            if App.download-status != "": Text {
+                text: App.download-status;
+                color: Theme.muted;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+            }
+            for entry in [
+                { id: "stats", label: "Stats", icon: @image-url("icons/stats.svg") },
+                { id: "settings", label: "Settings", icon: @image-url("icons/settings.svg") },
+            ]: Rectangle {
+                height: 40px;
+                border-radius: Theme.radius;
+                background: entry-touch.pressed ? Theme.hover : transparent;
+                HorizontalLayout {
+                    padding-left: 4px;
+                    spacing: 12px;
+                    Image {
+                        source: entry.icon;
+                        width: 20px;
+                        colorize: Theme.muted;
+                    }
+                    Text {
+                        text: entry.label;
+                        color: Theme.text;
+                        font-size: Theme.size-body;
+                        vertical-alignment: center;
+                    }
+                }
+                entry-touch := TouchArea {
+                    clicked => {
+                        root.close();
+                        App.navigate(entry.id);
+                    }
+                }
+            }
+            Text {
+                text: "Version " + App.version;
+                color: Theme.faint;
+                font-size: Theme.size-small;
+            }
+            Rectangle {
+                height: 40px;
+                border-radius: Theme.radius;
+                background: signout.pressed ? Theme.hover : transparent;
+                border-width: 1px;
+                border-color: Theme.line;
+                Text {
+                    text: "Sign out";
+                    color: Theme.text;
+                    font-size: Theme.size-body;
+                }
+                signout := TouchArea {
+                    clicked => {
+                        root.close();
+                        App.sign-out();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Across the top of the page while a newer build is waiting on the server.
+component UpdateBanner inherits Rectangle {
+    background: Theme.accent.with-alpha(0.14);
+    border-radius: Theme.radius + 2px;
+    border-width: 1px;
+    border-color: Theme.accent.with-alpha(0.4);
+    height: layout.preferred-height;
+
+    layout := HorizontalLayout {
+        padding: 10px;
+        padding-left: 16px;
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+            Text {
+                text: "This client version is out of date";
+                color: Theme.text;
+                font-size: Theme.size-body;
+                font-weight: 600;
+            }
+            Text {
+                text: App.update-error != ""
+                    ? App.update-error
+                    : "You have " + App.version + ", version " + App.update-version + " is available.";
+                color: App.update-error != "" ? Theme.danger : Theme.muted;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            PrimaryButton {
+                text: App.update-error != "" ? "Try again" : (Theme.compact ? "Update" : "Update and restart");
+                busy: App.update-busy;
+                clicked => { App.install-update(); }
+            }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "Cpz Music";
+    icon: @image-url("icons/app.svg");
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    min-width: 340px;
+    min-height: 520px;
+    background: Theme.bg;
+    default-font-size: Theme.size-body;
+
+    property <bool> signed-out: App.page == "setup" || App.page == "signin";
+    property <bool> compact: root.width < 640px;
+    property <bool> show-now-playing;
+    property <bool> show-menu;
+    init => { Theme.compact = root.compact; }
+    // A new page takes the focus off any text box the last one had, which
+    // also puts away the phone's keyboard. Search focuses its own box.
+    property <string> page: App.page;
+    changed page => {
+        if root.page != "search" {
+            keys.focus();
+        }
+    }
+    changed compact => { Theme.compact = root.compact; }
+
+    // Android's back button (and Escape on the desktop) closes what is on top,
+    // then goes back a page. Keys reach it from whatever has focus inside.
+    keys := FocusScope {
+        init => { self.focus(); }
+        // Captured, so a focused text box cannot swallow it first.
+        capture-key-pressed(event) => {
+            if event.text != Key.Back && event.text != Key.Escape {
+                return reject;
+            }
+            if root.show-menu {
+                root.show-menu = false;
+            } else if Playback.show-queue || Playback.show-devices {
+                Playback.show-queue = false;
+                Playback.show-devices = false;
+            } else if root.show-now-playing {
+                root.show-now-playing = false;
+            } else if App.can-go-back {
+                App.back();
+            } else if event.text == Key.Back {
+                // Like other music apps: out of the way, still playing.
+                App.leave();
+            } else {
+                return reject;
+            }
+            accept
+        }
+
+        if App.page == "setup": SetupPage { }
+        if App.page == "signin": SignInPage { }
+        if App.page == "loading": Spinner {
+            indeterminate: true;
+            width: 36px;
+            height: 36px;
+        }
+
+        if !root.signed-out && App.page != "loading" && root.compact: Rectangle {
+            // Keeps clear of the status bar, the camera cut-out and the gesture bar.
+            x: root.safe-area-insets.left;
+            y: root.safe-area-insets.top;
+            width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
+            height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+
+            VerticalLayout {
+                TopBar {
+                    menu => { root.show-menu = true; }
+                }
+                if App.update-version != "": HorizontalLayout {
+                    padding: 10px;
+                    padding-top: 0;
+                    UpdateBanner { }
+                }
+                Rectangle {
+                    vertical-stretch: 1;
+                    if App.page == "albums": AlbumsPage { }
+                    if App.page == "artists": ArtistsPage { }
+                    if App.page == "album": AlbumPage { }
+                    if App.page == "artist": ArtistPage { }
+                    if App.page == "search": SearchPage { }
+                    if App.page == "playlists": PlaylistsPage { }
+                    if App.page == "playlist": PlaylistPage { }
+                    if App.page == "downloads": DownloadsPage { }
+                    if App.page == "stats": StatsPage { }
+                    if App.page == "settings": SettingsPage { }
+                }
+                MiniPlayer {
+                    expand => { root.show-now-playing = true; }
+                }
+                TabBar { }
+            }
+
+            if root.show-now-playing: NowPlaying {
+                close => { root.show-now-playing = false; }
+            }
+            if Playback.show-queue: QueuePanel {
+                x: 8px;
+                y: 8px;
+                width: parent.width - 16px;
+                height: parent.height - 16px;
+            }
+            if Playback.show-devices: DevicesPanel {
+                x: 8px;
+                width: parent.width - 16px;
+                height: min(parent.height - 16px, 72px + max(1, Playback.devices.length) * 60px + (Playback.connected ? 0 : 40px));
+                y: parent.height - self.height - 8px;
+            }
+            if root.show-menu: AccountMenu {
+                close => { root.show-menu = false; }
+            }
+        }
+
+        if !root.signed-out && App.page != "loading" && !root.compact: VerticalLayout {
+            HorizontalLayout {
+                Sidebar { }
+                Rectangle {
+                    VerticalLayout {
+                        if App.update-version != "": HorizontalLayout {
+                            padding: 12px;
+                            padding-bottom: 0;
+                            UpdateBanner { }
+                        }
+                        if App.can-go-back: HorizontalLayout {
+                            height: 44px;
+                            padding-left: 12px;
+                            padding-top: 6px;
+                            alignment: start;
+                            IconButton {
+                                icon: @image-url("icons/back.svg");
+                                size: 20px;
+                                clicked => { App.back(); }
+                            }
+                        }
+                        Rectangle {
+                            if App.page == "albums": AlbumsPage { }
+                            if App.page == "artists": ArtistsPage { }
+                            if App.page == "album": AlbumPage { }
+                            if App.page == "artist": ArtistPage { }
+                            if App.page == "search": SearchPage { }
+                            if App.page == "playlists": PlaylistsPage { }
+                            if App.page == "playlist": PlaylistPage { }
+                            if App.page == "downloads": DownloadsPage { }
+                            if App.page == "stats": StatsPage { }
+                            if App.page == "settings": SettingsPage { }
+                        }
+                    }
+
+                    if Playback.show-queue: QueuePanel {
+                        x: parent.width - self.width - 12px;
+                        y: 12px;
+                        width: 360px;
+                        height: parent.height - 24px;
+                    }
+                    if Playback.show-devices: DevicesPanel {
+                        x: parent.width - self.width - 12px;
+                        y: parent.height - self.height - 12px;
+                        width: 320px;
+                        height: min(parent.height - 24px, 72px + max(1, Playback.devices.length) * 60px + (Playback.connected ? 0 : 40px));
+                    }
+                }
+            }
+            PlayerBar { }
+        }
+    }
+}

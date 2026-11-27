@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+exclude = ["vendor/*"]
+
+# Slint's Android backend with a fix for phone keyboards: it wrote stale text back
+# while the keyboard was still composing a word, so fast typing came out garbled.
+# See vendor/i-slint-backend-android-activity/PATCHED.md. Drop once upstream fixes it.
+[patch.crates-io]
+i-slint-backend-android-activity = { path = "vendor/i-slint-backend-android-activity" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

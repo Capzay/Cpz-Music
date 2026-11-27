@@ -9,8 +9,8 @@ use sha2::Sha256;
 /// without a Supabase session: the OBS overlay (a browser source cannot complete
 /// an OAuth flow) and jam invite links (handed to people with no account).
 ///
-/// Byte-compatible with the Next.js app's `tokens.ts`, so links already handed
-/// out keep working. `purpose` is part of the signed payload, so an OBS token can
+/// The same format the old Next.js app signed, so links it handed out keep
+/// working. `purpose` is part of the signed payload, so an OBS token can
 /// never be replayed as a jam invite.
 #[derive(Clone)]
 pub struct Tokens {

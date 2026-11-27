@@ -33,8 +33,8 @@ fn required(name: &str) -> Result<String> {
 }
 
 impl Config {
-    /// Takes the same variable names as the Next.js app, so one `.env.local`
-    /// serves both while they run side by side.
+    /// Also takes the `NEXT_PUBLIC_` names the old Next.js app used, so an
+    /// existing `.env.local` keeps working.
     pub fn from_env() -> Result<Self> {
         let supabase_url = match optional("SUPABASE_URL") {
             Some(url) => url,

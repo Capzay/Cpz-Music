@@ -1,4 +1,4 @@
--- The app's schema: Prisma's init and playlist_client_uuid migrations from Cpz-Music,
+-- The app's schema: the init and playlist_client_uuid migrations in ../migrations,
 -- unchanged. The RLS migrations are left out because they need Supabase's roles.
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";

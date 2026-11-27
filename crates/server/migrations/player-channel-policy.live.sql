@@ -1,14 +1,14 @@
 -- End-to-end check of the player-channel policies against realtime.messages
 -- itself, rather than against a copy of their predicates.
 --
---   psql "$DATABASE_URL" -f prisma/player-channel-policy.live.sql
+--   psql "$DATABASE_URL" -f crates/server/migrations/player-channel-policy.live.sql
 --
 -- Applies the policies, impersonates the `authenticated` role with a set of
 -- forged JWT claims, attempts a real INSERT, and rolls the whole thing back.
 -- Nothing survives the transaction. Every row must say PASS.
 begin;
 
-\i prisma/migrations/20260801000000_owner_only_player_channel/migration.sql
+\i crates/server/migrations/20260801000000_owner_only_player_channel/migration.sql
 
 create or replace function pg_temp.try_broadcast(claims text)
 returns text language plpgsql as $$

@@ -30,8 +30,8 @@ const SAVED_KEY: &str = "player";
 const ANNOUNCE_EVERY: Duration = Duration::from_secs(15);
 
 /// Everything the player can be asked to do. Serializable so a remote device can
-/// send the same commands to whichever device is playing; the JSON matches the
-/// web app's, so both kinds of device can drive each other.
+/// send the same commands to whichever device is playing. The JSON is the old
+/// web app's format.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Command {

@@ -1,213 +1,134 @@
 # Cpz Music
 
 A self-hosted music streamer for a personal library. Your files stay on your own
-disk; Supabase holds the database and handles sign-in. One Next.js process
-serves the web app, the API, and the audio.
-
-Runs as a PWA, a desktop app with Discord Rich Presence, and an Android app with
-lock-screen controls. Any of them can act as a remote for whichever device is
-actually playing.
-
-> This is a rewrite. The previous version was a Fastify API, a Vite SPA, an nginx
-> container and a separate authentication gateway, orchestrated by Docker
-> Compose. It is now a single application with no Docker anywhere.
+disk; Supabase holds the database and handles sign-in. A small Rust server
+streams the audio, and a native app plays it on Linux, Windows and Android.
+Any device can act as a remote for whichever one is actually playing.
 
 ## Features
 
 - **Library** scanned from disk, watched for changes, with album art extracted
   from tags
-- **Player** with queue, shuffle, repeat, and OS media-key integration
-- **Playlists** with reordering, stored on the device and synced when online
+- **Player** with queue, shuffle, repeat, and the system's media controls
+  (media keys and MPRIS on Linux, the media overlay on Windows, the
+  notification and lock screen on Android)
+- **Playlists**, stored on the device and synced when online
 - **Multi-device control**: one device plays, the others act as remotes
-- **Offline**: download albums to a device and play them with no connection,
-  including seeking. Playlists can be created and edited offline and sync later.
-  Listens recorded offline are replayed later on the day they actually happened
+- **Offline**: download songs and play them with no connection. Listens
+  recorded offline are sent later, on the day they happened
 - **Listening stats** by week, month, year, or all time
-- **Jam mode**: send someone a link and they can queue tracks from their phone
-  without seeing anything else
-- **OBS overlay** showing the current track over a transparent background
+- **Jam mode**: send someone a link and they can queue songs from their phone's
+  browser without seeing anything else
+- **OBS overlay** showing the current song over a transparent background
+- **Discord status** from the desktop app
+- **Self-updates**: the apps fetch new builds from your own server
 
-## Requirements
+## Layout
 
-- Node.js 20.9 or newer
-- A [Supabase](https://supabase.com) project (the free tier is plenty; only rows
-  are stored there, never audio)
-- A music folder
+```
+crates/server   axum server: API, audio, jam guest page and OBS overlay (pages/),
+                SQL schema (migrations/)
+crates/core     shared client code: API, sign-in, queue, player, device handover
+crates/app      the Slint app for Linux, Windows and Android
+crates/xtask    `cargo android`: builds the APK from android/ without Gradle
+android/        Android manifest, Java glue and resources
+packaging/      app icon
+scripts/        publish-client.sh (self-update builds), package-client.sh (installers)
+vendor/         patched Slint Android backend (see its PATCHED.md)
+```
 
-## Setup
+## Server setup
+
+You need a [Supabase](https://supabase.com) project (the free tier is plenty;
+only rows are stored there, never audio) and a music folder.
+
+1. Copy `.env.example` to `.env.local` and fill it in. Every value is explained
+   there. `DATABASE_URL` must be the session pooler string (port 5432);
+   `OWNER_GITHUB_ID` is your numeric GitHub id, and leaving it unset locks
+   everyone out.
+2. Apply the schema to a new database, in order:
+
+   ```bash
+   for f in crates/server/migrations/*/migration.sql; do psql "$DATABASE_URL" -f "$f"; done
+   ```
+
+   One of these enables row level security and the Realtime policies. Skipping
+   it exposes your data, since the anon key is public.
+   `crates/server/migrations/player-channel-policy.live.sql` checks the policies
+   against the live database and rolls everything back.
+3. Set up GitHub sign-in: create an OAuth app at
+   <https://github.com/settings/developers>, put its id and secret in Supabase
+   under **Authentication → Providers → GitHub**, and enable **Anonymous**
+   sign-ins (jam guests use them). Under **URL Configuration → Redirect URLs**
+   add `http://127.0.0.1:53682/auth/callback` (desktop) and
+   `uk.capzay.music://auth/callback` (Android).
+4. Build and run from the folder holding `.env.local`:
+
+   ```bash
+   cargo build --release -p cpz-server
+   BIND_ADDR=0.0.0.0:3006 target/release/cpz-server
+   ```
+
+   For a Raspberry Pi, cross-build on a faster machine with
+   `cargo zigbuild --release -p cpz-server --target aarch64-unknown-linux-gnu.2.36`.
+   Under systemd, order it after `network-online.target`.
+
+Serve it over HTTPS for anything beyond your own network, for example with a
+Cloudflare Tunnel pointing at the server's port.
+
+## Apps
 
 ```bash
-git clone https://github.com/<you>/cpz-music.git
-cd cpz-music
-npm install
-cp .env.example .env.local
+cargo run -p cpz-app                 # desktop, in development
+scripts/package-client.sh            # installers for Linux and Windows → dist/
+cargo android                        # signed Android APK → dist/
+scripts/publish-client.sh --windows --android   # put builds on the server for self-update
 ```
 
-Fill in `.env.local`. Every value is explained in `.env.example`; the ones worth
-calling out:
+On first start the app asks for the server's address, then signs in with GitHub.
 
-| Variable | Notes |
-| --- | --- |
-| `DATABASE_URL` | The **session pooler** string (port 5432, host `*.pooler.supabase.com`). Direct `db.*.supabase.co` is IPv6-only; the pooler still answers on IPv4, which a home network usually needs. Do not use transaction mode (port 6543). |
-| `SUPABASE_SERVICE_ROLE_KEY` | Bypasses row level security. Server-side only, and never given a `NEXT_PUBLIC_` prefix. |
-| `OWNER_GITHUB_ID` | Your numeric GitHub id, from `https://api.github.com/users/<username>`. Only this account can reach the library, and leaving it unset locks everyone out rather than letting everyone in. |
-| `APP_SECRET` | Signs jam invites and overlay links. `openssl rand -hex 32`. Changing it revokes every outstanding link. |
-| `MUSIC_DIR` | Absolute path to your music. Only ever read from. |
+- **Linux:** `sh dist/cpz-music-<version>-linux-x86_64-setup.sh` installs to
+  `~/.local` and adds a menu entry; add `--uninstall` to remove it.
+- **Windows:** `Cpz-Music-Setup-<version>.exe` installs per user with a Start
+  menu shortcut; remove it from Installed apps. Cross-built from Linux with
+  cargo-zigbuild; the exe icon needs `llvm-windres`.
+- **Android:** needs the Android SDK with build-tools, a platform and the NDK
+  (`ANDROID_HOME`, default `~/Android/Sdk`), a JDK, and
+  `rustup target add aarch64-linux-android`. See `crates/xtask`.
 
-Then set up GitHub sign-in:
-
-1. Create an OAuth app at <https://github.com/settings/developers>.
-2. Set the callback URL to `https://<your-domain>/auth/callback`.
-3. Paste the client id and secret into Supabase under
-   **Authentication → Providers → GitHub**.
-4. Under **Authentication → Providers → Anonymous**, enable anonymous sign-ins.
-   Jam guests use them.
-
-Apply the schema and start:
-
-```bash
-npx prisma migrate deploy
-npm run build
-npm start
-```
-
-The first launch scans `MUSIC_DIR`. Large libraries take a few minutes; the app
-is usable while it works. If this runs under systemd, wait for DNS before
-starting the process (`After=network-online.target` and
-`Wants=network-online.target`); otherwise the first scan can fail with
-`EAI_AGAIN` at boot.
-
-> **Build with your real environment.** `NEXT_PUBLIC_*` values are compiled into
-> the bundle and into the Content Security Policy, so `npm run build` must run
-> with the same `.env.local` that production uses. Building with placeholders
-> produces a policy that blocks your own Supabase project.
-
-### Exposing it
-
-Any HTTPS reverse proxy works. A Cloudflare Tunnel avoids opening a port:
-
-```bash
-cloudflared tunnel --url http://localhost:3000
-```
-
-Plain HTTP is not an option beyond localhost: session cookies and the service
-worker both require a secure context.
-
-## Desktop and Android
-
-The Electron desktop wrapper is a thin shell around the hosted site, so a web
-change reaches it without a rebuild. It is a separate workspace with its own
-lockfile, not installed by the web app.
-
-```bash
-cd electron && npm install && npm start          # dev
-cd electron && npm run dist:linux                # AppImage
-CPZ_SERVER_URL=https://music.example.com npm start   # your own deployment
-```
-
-Android is the native Rust app in `crates/app`, built without Gradle:
-
-```bash
-cargo android            # signed release APK → dist/
-cargo android install    # build, adb install, launch
-```
-
-It needs the Android SDK with build-tools, a platform and the NDK
-(`ANDROID_HOME`, default `~/Android/Sdk`), a JDK, and
-`rustup target add aarch64-linux-android`. See `crates/xtask` for the steps.
-
-## Architecture
-
-```
-Browser / Electron / Android
-        |
-        |  HTTPS
-        v
-   Next.js (one process)
-   |         |         |
-   |         |         +-- reads audio + artwork from MUSIC_DIR
-   |         +-- Prisma ------> Supabase Postgres
-   +-- Supabase Auth + Realtime
-```
-
-**Everything in one app.** Pages are server components that query Prisma
-directly, so there is no REST layer or client-side data fetching to maintain.
-Audio, artwork, and playlists are the exceptions: Next.js will not serve
-arbitrary filesystem paths, so those are route handlers implementing HTTP Range;
-playlists live in a device-local store and sync through `/api/playlists/sync`
-so they still work when the server is unreachable.
-
-**The scanner** needs a long-lived watcher, which a request-driven framework has
-nowhere obvious to put. It runs from `instrumentation.ts`, the once-per-boot
-hook, and shares the web server's process.
-
-**Multi-device sync** carries no server state. Devices announce themselves over
-Supabase Realtime presence and talk to each other over broadcast. The active
-device is a pure function of presence (highest claim timestamp, device id
-breaking ties), so every client independently agrees, no election message can be
-lost, and handover is automatic when a device disconnects.
-
-**Authorisation** lives in `src/lib/auth.ts` and nowhere else. The previous
-design put identity in an nginx gateway and permissions in the app, so neither
-could see the other and every change meant editing both.
-
-### Layout
-
-```
-src/
-├── app/              routes: pages, API handlers, jam, OBS overlay
-├── lib/              auth, db, scanner, queue maths, tokens, realtime
-├── components/
-├── store/            zustand: player, downloads, playlists
-└── instrumentation.ts
-prisma/               schema and migrations, including RLS policies
-electron/             desktop wrapper
-crates/               Rust server and native app (`rust` branch)
-android/              Android manifest, Java glue and icons for `cargo android`
-```
+Bump `version` in `crates/app/Cargo.toml` before publishing: apps only update to
+a higher version.
 
 ## Security
 
 The repository is public, so it is written on the assumption that a stranger is
-reading it.
+reading it. See also [SECURITY.md](SECURITY.md).
 
 - **Access** is a single GitHub account. An unset `OWNER_GITHUB_ID` refuses
   everyone rather than falling open.
 - **Guests** get a Supabase anonymous session whose jam scope lives in
-  `app_metadata`, which only the service role can write. It arrives as a signed
-  JWT claim, so it cannot be forged the way the old design's proxy headers
-  could. Guest permissions are one deny-by-default allow-list, so a new endpoint
-  is host-only until somebody deliberately opens it.
+  `app_metadata`, which only the service role can write, so it cannot be forged.
+  Guest permissions are one deny-by-default allow-list, so a new endpoint is
+  host-only until somebody deliberately opens it.
 - **Row level security** is on for every table with no permissive policy, and
-  the default `anon` and `authenticated` grants are revoked. The anon key ships
-  in the browser bundle and is public by design; this is what makes that safe.
+  the default `anon` and `authenticated` grants are revoked.
 - **Realtime** policies let any signed-in user listen on the player channel but
-  only the owner broadcast, so a guest cannot forge playback state or drive
-  someone else's device.
-- **File serving** resolves every path and refuses anything outside its root,
-  and the client's track type carries no `filePath`.
-- **Rate limits** on jam joins and queue additions, keyed on the participant as
-  well as the address.
-- **CI** runs typecheck, lint, tests, build, `npm audit`, and a gitleaks secret
-  scan on every push. Dependabot is on.
-- No audio, artwork, database dumps, or signing keys are tracked. Git history
-  starts clean, so there is no historical secret to scrub.
-
-Found something? Open an issue, or email the address on my GitHub profile.
+  only the owner broadcast, so a guest cannot forge playback state.
+- **File serving** refuses any path outside its root.
+- **The two web pages** carry a strict Content Security Policy with a fresh
+  nonce per response; every other response allows no script at all.
+- **Rate limits** on jam joins and queue additions.
+- **CI** runs rustfmt, clippy, the tests and a gitleaks secret scan.
 
 ## Development
 
 ```bash
-npm run dev         # dev server
-npm test            # vitest
-npm run typecheck
-npm run lint
+cargo fmt --all && cargo clippy --workspace --all-targets
+docker run -d --rm --name cpz-test-pg -e POSTGRES_PASSWORD=pg -p 55432:5432 postgres:17-alpine
+TEST_DATABASE_URL=postgres://postgres:pg@localhost:55432/postgres cargo test --workspace
 ```
 
-Tests cover the parts that can be silently wrong rather than everything: HTTP
-Range parsing, path traversal, shuffle and queue navigation, playlist
-reordering and last-write-wins sync, invite token signing, the owner gate, the
-guest allow-list, and listen-timestamp clamping.
+Without `TEST_DATABASE_URL` the server's database tests skip themselves.
 
 ## Licence
 

@@ -27,8 +27,7 @@ pub struct TrackFile {
 /// Where tracks and covers live on disk. A playing song sends a Range request for
 /// every seek and buffer refill, and each would otherwise wait on a database that
 /// is a round trip across the internet away. The scanner clears this whenever the
-/// library changes; the TTL only covers a second writer, such as the Next.js
-/// scanner during a migration.
+/// library changes; the TTL only covers a second writer to the same database.
 pub struct MediaCache {
     tracks: Cache<i32, TrackFile>,
     artwork: Cache<i32, Arc<str>>,

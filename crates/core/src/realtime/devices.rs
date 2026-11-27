@@ -7,8 +7,8 @@
 //! message to lose, and when the active device drops out of presence the next one
 //! takes over by itself.
 //!
-//! The messages match the web app's, so native and web devices can sit on the
-//! same channel and drive each other.
+//! The messages are the JSON the old web app used, which the server's jam
+//! broadcasts still send.
 
 use std::time::{Duration, Instant};
 

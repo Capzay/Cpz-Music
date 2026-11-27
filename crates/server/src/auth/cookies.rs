@@ -7,7 +7,7 @@ use serde_json::Value;
 use super::session::Session;
 
 /// Reads and writes the session cookies `@supabase/ssr` uses, in its exact format,
-/// so one sign-in works for this server and the Next.js app alike. The session is
+/// so sessions the old Next.js app wrote are still read. The session is
 /// JSON, encoded as `base64-<base64url>`, and split into `<key>.0`, `<key>.1`, ...
 /// once it outgrows a single cookie.
 const BASE64_PREFIX: &str = "base64-";

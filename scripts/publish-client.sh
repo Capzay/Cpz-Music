@@ -23,9 +23,10 @@ publish() {
     local current
     # `|| true`: the first publish of a platform has no latest.json yet.
     current=$(ssh "$HOST" "cat $DIR/$platform/latest.json 2>/dev/null || true" | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p')
+    # Skipped rather than fatal, so a run that stopped halfway can be repeated.
     if [ "$current" = "$version" ]; then
-        echo "$platform already has $version: bump the version in crates/app/Cargo.toml" >&2
-        exit 1
+        echo "$platform already has $version, skipping (bump the version in crates/app/Cargo.toml for a new release)" >&2
+        return 0
     fi
     local sha
     sha=$(sha256sum "$binary" | cut -d' ' -f1)

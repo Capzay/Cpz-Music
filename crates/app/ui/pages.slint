@@ -588,8 +588,9 @@ export component PlaylistsPage inherits Rectangle {
                 }
                 PrimaryButton {
                     text: "Create";
-                    enabled: name.text != "";
+                    enabled: name.text != "" || name.composing != "";
                     clicked => {
+                        name.commit();
                         App.create-playlist(name.text);
                         root.naming = false;
                     }
@@ -655,8 +656,9 @@ export component PlaylistPage inherits Rectangle {
                         }
                         PrimaryButton {
                             text: "Save";
-                            enabled: new-name.text != "";
+                            enabled: new-name.text != "" || new-name.composing != "";
                             clicked => {
+                                new-name.commit();
                                 App.rename-playlist(new-name.text);
                                 root.renaming = false;
                             }
@@ -837,6 +839,7 @@ export component SetupPage inherits Rectangle {
             placeholder: "https://music.example.com";
             text <=> App.server-url;
             font-size: Theme.size-body;
+            hints: { capitalization: CapitalizationMode.none, auto-correct: false, auto-complete: false };
             accepted(text) => { App.connect(text); }
         }
         if App.setup-error != "": Text {
@@ -848,8 +851,11 @@ export component SetupPage inherits Rectangle {
         PrimaryButton {
             text: "Connect";
             busy: App.busy;
-            enabled: App.server-url != "";
-            clicked => { App.connect(App.server-url); }
+            enabled: App.server-url != "" || url.composing != "";
+            clicked => {
+                url.commit();
+                App.connect(App.server-url);
+            }
         }
     }
 }

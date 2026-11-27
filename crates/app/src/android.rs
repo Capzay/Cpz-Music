@@ -55,6 +55,11 @@ fn android_main(app: slint::android::AndroidApp) {
     }
     now_playing("", "", false);
     ACTIVITY.store(std::ptr::null_mut(), Ordering::Release);
+    // Android can start the activity again in this same process (seen after the
+    // update installer's prompt). Logging and Slint can only be set up once per
+    // process, so a second `android_main` would panic; exit so the next launch
+    // starts a fresh process instead.
+    std::process::exit(0);
 }
 
 /// Runs `call` with the activity, on whatever thread this is.

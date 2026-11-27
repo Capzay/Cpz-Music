@@ -21,7 +21,8 @@ version=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/app/Cargo.toml | head -1)
 publish() {
     local platform=$1 binary=$2 file=$3
     local current
-    current=$(ssh "$HOST" "cat $DIR/$platform/latest.json 2>/dev/null" | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p')
+    # `|| true`: the first publish of a platform has no latest.json yet.
+    current=$(ssh "$HOST" "cat $DIR/$platform/latest.json 2>/dev/null || true" | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p')
     if [ "$current" = "$version" ]; then
         echo "$platform already has $version: bump the version in crates/app/Cargo.toml" >&2
         exit 1

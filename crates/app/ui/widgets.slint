@@ -390,11 +390,20 @@ export component TextField inherits Rectangle {
     in property <string> placeholder;
     in property <length> font-size: Theme.size-title;
     in-out property <string> text;
+    in property <InputMethodHints> hints;
+    // The word the phone keyboard is still composing: Android only adds it to `text`
+    // on space or when the box loses focus.
+    out property <string> composing: input.preedit-text;
     callback edited(string);
     callback accepted(string);
 
     public function focus-input() {
         input.focus();
+    }
+
+    // Move the composing word into `text`. Call before reading `text` from a button.
+    public function commit() {
+        input.clear-focus();
     }
 
     height: 44px;
@@ -414,11 +423,16 @@ export component TextField inherits Rectangle {
                 font-size: root.font-size;
                 vertical-alignment: center;
                 single-line: true;
-                selection-background-color: Theme.accent.with-alpha(0.4);
+                input-method-hints: root.hints;
+                // Slint paints the word the keyboard is still composing as a selection.
+                // Hide that while composing; alpha 0 rather than `transparent`, because
+                // Android draws the caret in this colour at full alpha.
+                selection-background-color: self.preedit-text != "" ? Theme.accent.with-alpha(0) : Theme.accent.with-alpha(0.4);
+                selection-foreground-color: Theme.text;
                 edited => { root.edited(self.text); }
                 accepted => { root.accepted(self.text); }
             }
-            if root.text == "": Text {
+            if root.text == "" && input.preedit-text == "": Text {
                 x: 0;
                 text: root.placeholder;
                 color: Theme.faint;

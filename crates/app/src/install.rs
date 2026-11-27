@@ -63,6 +63,7 @@ fn place(from: &Path, to: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(target_os = "windows"))]
 fn write(path: &Path, contents: &[u8]) -> Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
@@ -212,7 +213,7 @@ fn tell(text: &str, error: bool) {
 }
 
 #[cfg(target_os = "windows")]
-fn register(dir: &Path, exe: &Path, icon: &Path) -> Result<()> {
+fn register(dir: &Path, exe: &Path) -> Result<()> {
     use winreg::RegKey;
     use winreg::enums::HKEY_CURRENT_USER;
     let (key, _) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(UNINSTALL_KEY)?;
@@ -220,7 +221,8 @@ fn register(dir: &Path, exe: &Path, icon: &Path) -> Result<()> {
     key.set_value("DisplayName", &NAME)?;
     key.set_value("DisplayVersion", &crate::update::VERSION)?;
     key.set_value("Publisher", &"Capzay")?;
-    key.set_value("DisplayIcon", &icon.display().to_string())?;
+    // The icon is built into the .exe (see build.rs).
+    key.set_value("DisplayIcon", &format!("{},0", exe.display()))?;
     key.set_value("InstallLocation", &dir.display().to_string())?;
     key.set_value(
         "UninstallString",
@@ -252,14 +254,11 @@ pub fn refresh_version() {
 fn install() -> Result<()> {
     let dir = install_dir()?;
     let exe = dir.join("cpz-music.exe");
-    let icon = dir.join("cpz-music.ico");
     place(&std::env::current_exe()?, &exe)?;
-    write(&icon, include_bytes!("../../../packaging/icon.ico"))?;
 
     let mut link = mslnk::ShellLink::new(&exe).context("could not make the shortcut")?;
     link.set_name(Some(NAME.into()));
     link.set_working_dir(Some(dir.display().to_string()));
-    link.set_icon_location(Some(icon.display().to_string()));
     let lnk = shortcut()?;
     if let Some(parent) = lnk.parent() {
         std::fs::create_dir_all(parent)?;
@@ -267,7 +266,7 @@ fn install() -> Result<()> {
     link.create_lnk(&lnk)
         .context("could not add the Start menu shortcut")?;
 
-    register(&dir, &exe, &icon).context("could not add it to Installed apps")?;
+    register(&dir, &exe).context("could not add it to Installed apps")?;
     Ok(())
 }
 

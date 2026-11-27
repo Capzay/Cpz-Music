@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 description = "Cpz Music for Linux, Windows and Android"
 
-# Android builds this as a cdylib (`cargo rustc --crate-type cdylib`, see
-# scripts/android.sh); the desktop links it into the binary.
+# Android builds this as a cdylib (`cargo android`, see crates/xtask);
+# the desktop links it into the binary.
 [lib]
 name = "cpz_app"
 path = "src/lib.rs"

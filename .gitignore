@@ -75,5 +75,5 @@ next-env.d.ts
 *.jks
 /target
 
-# Android APKs from scripts/android.sh
+# APKs from `cargo android`
 /dist

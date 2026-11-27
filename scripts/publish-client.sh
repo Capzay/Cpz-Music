@@ -5,7 +5,7 @@
 #
 #   scripts/publish-client.sh                      # Linux x86_64
 #   scripts/publish-client.sh --windows            # Windows x86_64 too (needs mingw-w64-gcc)
-#   scripts/publish-client.sh --android            # the Android APK too (see scripts/android.sh)
+#   scripts/publish-client.sh --android            # the Android APK too (see crates/xtask)
 #   scripts/publish-client.sh --android --no-linux # only Android
 #
 # HOST and DIR say where the server keeps builds (its RELEASES_DIR).
@@ -61,6 +61,6 @@ if [ $windows = 1 ]; then
 fi
 
 if [ $android = 1 ]; then
-    scripts/android.sh release
+    cargo android
     publish android-aarch64 "dist/cpz-music-$version.apk" cpz-music.apk
 fi

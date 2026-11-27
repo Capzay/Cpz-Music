@@ -1,4 +1,4 @@
-//! Android start-up and the bridge to the Java side (`android/app/src/main/java`).
+//! Android start-up and the bridge to the Java side (`android/java`).
 //!
 //! Rust calls instance methods on the running `MainActivity`, which avoids
 //! looking up app classes from native threads (their class loader cannot see

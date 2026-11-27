@@ -27,6 +27,7 @@ fn device(api: &Api, id: &str) -> Device {
         supabase: ClientConfig {
             supabase_url: api.server().to_owned(),
             anon_key: "anon".into(),
+            public_url: None,
         },
         topic: PLAYER_TOPIC.into(),
         presence_key: id.into(),

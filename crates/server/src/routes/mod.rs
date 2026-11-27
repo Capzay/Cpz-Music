@@ -53,6 +53,7 @@ async fn client_config(State(state): State<Shared>) -> Json<Value> {
     Json(json!({
         "supabaseUrl": state.config.supabase_url,
         "anonKey": state.config.anon_key,
+        "publicUrl": state.config.public_url,
     }))
 }
 

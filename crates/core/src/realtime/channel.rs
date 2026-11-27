@@ -411,6 +411,7 @@ mod tests {
         let config = ClientConfig {
             supabase_url: "https://abc.supabase.co/".into(),
             anon_key: "a.b+c".into(),
+            public_url: None,
         };
         assert_eq!(
             websocket_url(&config),
@@ -419,6 +420,7 @@ mod tests {
         let local = ClientConfig {
             supabase_url: "http://127.0.0.1:54321".into(),
             anon_key: "k".into(),
+            public_url: None,
         };
         assert!(websocket_url(&local).starts_with("ws://127.0.0.1:54321/realtime/v1/websocket"));
     }

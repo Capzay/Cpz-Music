@@ -49,8 +49,8 @@ pub struct Paths {
 /// Everything that needs a signed-in session.
 pub struct Services {
     pub api: Api,
-    /// The server's address, for links such as cover art handed to Discord.
-    pub server: String,
+    /// An https address for the server, for cover art handed to Discord.
+    pub public_server: String,
     pub hub: Hub,
     pub downloads: Arc<Downloads>,
     pub playlists: Arc<Playlists>,
@@ -208,6 +208,18 @@ fn describe(err: &ApiError) -> String {
 }
 
 /// Accepts "music.example.com" as well as a full URL.
+/// The address Discord fetches cover art from. Discord only shows public https
+/// images, so a private address (Tailscale, LAN) gives way to the public one
+/// the server says it has.
+fn discord_server(server: &str, public_url: Option<&str>) -> String {
+    match public_url {
+        Some(public) if !server.starts_with("https://") && public.starts_with("https://") => {
+            public.into()
+        }
+        _ => server.into(),
+    }
+}
+
 pub fn normalise_server(raw: &str) -> Option<String> {
     let trimmed = raw.trim().trim_end_matches('/');
     if trimmed.is_empty() {
@@ -470,7 +482,10 @@ impl Ctx {
 
         // Stamps the owner flag the player channel needs. Refused means this is
         // not the library's owner; unreachable is fine, the app works offline.
-        match api.claim_owner().await {
+        // The saved settings can predate the server learning its public
+        // address, so a fresh copy is fetched alongside; offline, the saved one does.
+        let (claimed, fresh) = tokio::join!(api.claim_owner(), fetch_config(&http, &server));
+        match claimed {
             Err(ApiError::Status(status)) if status.as_u16() == 401 => {
                 let _ = store.remove(SESSION_KEY);
                 self.ui(|ui| {
@@ -489,6 +504,15 @@ impl Ctx {
             self.shared.paths.data.join("downloads"),
         ));
         let listens = Arc::new(Listens::new(store.clone()));
+        let config = match fresh {
+            Ok(fresh) => {
+                let _ = store.set(CONFIG_KEY, &fresh);
+                fresh
+            }
+            Err(_) => config,
+        };
+        let public_server = discord_server(&server, config.public_url.as_deref());
+
         let art = Art::new(http, &server, self.shared.paths.cache.join("art"));
         let player = Player::start(PlayerDeps {
             api: api.clone(),
@@ -516,7 +540,7 @@ impl Ctx {
         let playlists = Arc::new(Playlists::load(self.shared.store.clone()));
         let services = Arc::new(Services {
             api: api.clone(),
-            server,
+            public_server,
             hub,
             downloads,
             playlists,
@@ -627,7 +651,7 @@ impl Ctx {
         let mut changes = services.hub.subscribe();
         let ctx = self.clone();
         let (downloads, art) = (services.downloads.clone(), services.art.clone());
-        let server = services.server.clone();
+        let server = services.public_server.clone();
         tokio::spawn(async move {
             #[cfg(target_os = "android")]
             let mut shown = (String::new(), String::new(), false);
@@ -1808,6 +1832,20 @@ enum AlbumList {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn discord_gets_the_public_address_off_https() {
+        let public = Some("https://music.example.com");
+        assert_eq!(
+            discord_server("http://pi:3006", public),
+            "https://music.example.com"
+        );
+        assert_eq!(
+            discord_server("https://pi.example.com", public),
+            "https://pi.example.com"
+        );
+        assert_eq!(discord_server("http://pi:3006", None), "http://pi:3006");
+    }
 
     #[test]
     fn accepts_bare_hosts_and_refuses_junk() {

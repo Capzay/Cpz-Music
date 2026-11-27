@@ -231,6 +231,7 @@ impl Harness {
             artwork_dir: root.join("artwork"),
             releases_dir: root.join("releases"),
             app_secret: Some(SECRET.into()),
+            public_url: Some("https://music.example.com".into()),
         })
         .unwrap();
 

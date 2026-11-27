@@ -32,6 +32,7 @@ async fn client(h: &Harness, expires_at: Option<i64>) -> Api {
         ClientConfig {
             supabase_url: h.state.config.supabase_url.clone(),
             anon_key: "anon".into(),
+            public_url: Some("https://music.example.com".into()),
         }
     );
     let raw = h.mock.session(&h.owner_id, 3600);

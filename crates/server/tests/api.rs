@@ -1127,6 +1127,7 @@ async fn hands_native_apps_the_public_supabase_settings() {
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["anonKey"], "anon");
     assert!(body["supabaseUrl"].as_str().unwrap().starts_with("http://"));
+    assert_eq!(body["publicUrl"], "https://music.example.com");
     assert_eq!(h.mock.user_lookups.load(Ordering::SeqCst), 0);
 }
 

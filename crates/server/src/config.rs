@@ -22,6 +22,10 @@ pub struct Config {
     /// `windows-x86_64`), each with the binary and a `latest.json` naming it.
     pub releases_dir: PathBuf,
     pub app_secret: Option<String>,
+    /// The https address the internet reaches this server at, handed to apps
+    /// that talk to it over a private one: Discord can only show cover art
+    /// from a public https link.
+    pub public_url: Option<String>,
 }
 
 fn optional(name: &str) -> Option<String> {
@@ -66,6 +70,7 @@ impl Config {
                     .as_ref(),
             ),
             app_secret: optional("APP_SECRET"),
+            public_url: optional("PUBLIC_URL").map(|url| url.trim_end_matches('/').to_owned()),
         })
     }
 }

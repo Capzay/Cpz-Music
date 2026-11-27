@@ -145,6 +145,7 @@ pub fn client(url: &str, token: &str) -> Api {
     let config = ClientConfig {
         supabase_url: url.to_owned(),
         anon_key: "anon".into(),
+        public_url: None,
     };
     let session = Session {
         access_token: token.into(),

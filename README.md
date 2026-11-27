@@ -75,6 +75,9 @@ only rows are stored there, never audio) and a music folder.
 
 Serve it over HTTPS for anything beyond your own network, for example with a
 Cloudflare Tunnel pointing at the server's port.
+Set `PUBLIC_URL` to that https address: apps connected over a private one
+(Tailscale, LAN) use it for cover art in Discord, which only shows public
+https images.
 
 ## Apps
 

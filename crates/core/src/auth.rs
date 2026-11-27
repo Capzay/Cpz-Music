@@ -365,6 +365,7 @@ mod tests {
         let config = ClientConfig {
             supabase_url: "https://abc.supabase.co".into(),
             anon_key: "anon".into(),
+            public_url: None,
         };
         let pkce = Pkce::new();
         let url = Url::parse(&authorize_url(

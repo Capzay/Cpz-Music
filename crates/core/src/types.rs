@@ -191,4 +191,7 @@ impl RepeatMode {
 pub struct ClientConfig {
     pub supabase_url: String,
     pub anon_key: String,
+    /// The server's public https address, when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_url: Option<String>,
 }

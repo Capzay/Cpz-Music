@@ -42,6 +42,10 @@ souvlaki = { version = "0.9.3", default-features = false, features = ["use_zbus"
 [target.'cfg(target_os = "windows")'.dependencies]
 slint = { version = "1.19.1", features = ["raw-window-handle-06"] }
 raw-window-handle = "0.6"
+# `--install`: the Start menu shortcut, the Installed apps entry, message boxes.
+mslnk = "0.1.8"
+winreg = "0.56"
+windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 slint = { version = "1.19.1", features = ["backend-android-activity-06"] }

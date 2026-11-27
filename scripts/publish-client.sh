@@ -4,7 +4,7 @@
 # to a version higher than its own.
 #
 #   scripts/publish-client.sh                      # Linux x86_64
-#   scripts/publish-client.sh --windows            # Windows x86_64 too (needs mingw-w64-gcc)
+#   scripts/publish-client.sh --windows            # Windows x86_64 too (cargo-zigbuild)
 #   scripts/publish-client.sh --android            # the Android APK too (see crates/xtask)
 #   scripts/publish-client.sh --android --no-linux # only Android
 #
@@ -57,7 +57,7 @@ if [ $linux = 1 ]; then
 fi
 
 if [ $windows = 1 ]; then
-    cargo build --release -p cpz-app --target x86_64-pc-windows-gnu
+    cargo zigbuild --release -p cpz-app --target x86_64-pc-windows-gnu
     publish windows-x86_64 target/x86_64-pc-windows-gnu/release/cpz-music.exe cpz-music.exe
 fi
 

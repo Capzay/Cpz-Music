@@ -144,7 +144,15 @@ async fn the_native_client_reads_and_writes_everything_it_needs() {
     assert!(!file.exists());
     assert!(!downloads.is_downloaded(track.id));
 
-    assert!(api.settings().await.unwrap().is_object());
+    let settings = api.settings().await.unwrap();
+    assert!(settings.overlay_url.unwrap().contains("/obs?token="));
+    assert_eq!(settings.jam, None);
+    api.jam_action("/api/jam/start", &serde_json::json!({ "hostName": "DJ" }))
+        .await
+        .unwrap();
+    let settings = api.settings().await.unwrap();
+    assert_eq!(settings.jam.unwrap().host_name.as_deref(), Some("DJ"));
+    assert!(settings.invite_url.unwrap().contains("/jam/join?token="));
 }
 
 #[tokio::test]

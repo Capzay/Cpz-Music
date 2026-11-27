@@ -11,7 +11,8 @@ use slint::{ComponentHandle, Image, Model, ModelRc, VecModel};
 
 use crate::art::Pixels;
 use crate::{
-    AlbumItem, App, AppWindow, ArtistItem, DeviceItem, Playback, PlaylistItem, QueueItem, TrackItem,
+    AlbumItem, App, AppWindow, ArtistItem, DeviceItem, GuestItem, Playback, PlaylistItem,
+    QueueItem, StatTrack, TrackItem,
 };
 
 pub fn time(seconds: f64) -> String {
@@ -70,6 +71,9 @@ pub struct View {
     pub downloads: Rc<VecModel<TrackItem>>,
     pub queue: Rc<VecModel<QueueItem>>,
     pub devices: Rc<VecModel<DeviceItem>>,
+    pub stats_tracks: Rc<VecModel<StatTrack>>,
+    pub stats_artists: Rc<VecModel<ArtistItem>>,
+    pub guests: Rc<VecModel<GuestItem>>,
 
     queue_ids: Vec<i32>,
     /// Queue indices in the order the queue panel lists them.
@@ -108,6 +112,9 @@ pub fn install(ui: &AppWindow) {
     app.set_playlist_tracks(ModelRc::from(view.playlist_tracks.clone()));
     app.set_playlist_covers(ModelRc::from(view.playlist_covers.clone()));
     app.set_downloads(ModelRc::from(view.downloads.clone()));
+    app.set_stats_tracks(ModelRc::from(view.stats_tracks.clone()));
+    app.set_stats_artists(ModelRc::from(view.stats_artists.clone()));
+    app.set_guests(ModelRc::from(view.guests.clone()));
     let playback = ui.global::<Playback>();
     playback.set_queue(ModelRc::from(view.queue.clone()));
     playback.set_devices(ModelRc::from(view.devices.clone()));
@@ -312,6 +319,13 @@ impl View {
             if item.track.album_id == album_id {
                 item.art = image.clone();
                 self.queue.set_row_data(row, item);
+            }
+        }
+        for row in 0..self.stats_tracks.row_count() {
+            let mut item = self.stats_tracks.row_data(row).expect("row is in range");
+            if item.album_id == album_id {
+                item.art = image.clone();
+                self.stats_tracks.set_row_data(row, item);
             }
         }
         let app = ui.global::<App>();

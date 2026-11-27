@@ -1,12 +1,12 @@
 // The UI's state, filled in from Rust. Screens read these and call back.
 
-import { TrackItem, QueueItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem } from "types.slint";
+import { TrackItem, QueueItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, StatTrack, GuestItem } from "types.slint";
 
-export { TrackItem, QueueItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem }
+export { TrackItem, QueueItem, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, StatTrack, GuestItem }
 
 export global App {
     // setup | signin | loading | albums | artists | album | artist | search
-    // | playlists | playlist | downloads
+    // | playlists | playlist | downloads | stats | settings
     in-out property <string> page: "loading";
     in property <bool> can-go-back;
     // Set while a request for the current page is out.
@@ -47,6 +47,28 @@ export global App {
     // "Downloading 3 of 12", or empty when nothing is.
     in property <string> download-status;
 
+    // week | month | year | all
+    in-out property <string> stats-period: "year";
+    in property <string> stats-time;
+    in property <string> stats-plays;
+    in property <string> stats-songs;
+    in property <string> stats-artist-count;
+    in property <[StatTrack]> stats-tracks;
+    in property <[ArtistItem]> stats-artists;
+
+    // Settings: the jam, the OBS overlay and this device.
+    in property <bool> jam-running;
+    in property <string> jam-title;
+    in property <string> invite-url;
+    in property <[GuestItem]> guests;
+    in property <string> overlay-url;
+    // APP_SECRET is unset on the server, so it cannot sign links.
+    in property <bool> secret-missing;
+    in property <string> device-name;
+    // Desktop only: Discord and the system's media controls.
+    in property <bool> desktop;
+    in property <bool> discord;
+
     // This build's version, and a newer one the server has, or empty.
     in property <string> version;
     in property <string> update-version;
@@ -84,6 +106,14 @@ export global App {
     callback clear-downloads();
     // Downloads the newer build, swaps it in and restarts.
     callback install-update();
+    callback stats-period-picked(string);
+    callback start-jam(string);
+    callback stop-jam();
+    callback new-invite();
+    callback admit(string);
+    callback kick(string);
+    callback rename-device(string);
+    callback set-discord(bool);
     // Android back with nothing left to go back to: send the app to the background.
     callback leave();
 }

@@ -84,6 +84,12 @@ pub async fn read(
         return ApiError::unauthorized().into_response();
     }
 
+    no_store(snapshot(&state))
+}
+
+/// What is playing now, with the clock run forward to this moment. Also what a
+/// jam guest's page shows along the bottom.
+pub fn snapshot(state: &Shared) -> Value {
     let playing = state.now_playing.read().unwrap();
 
     // The device posts only when something changes, so run the clock forward here
@@ -105,9 +111,9 @@ pub async fn read(
     };
     let current_time = (playing.current_time + elapsed).min(limit);
 
-    no_store(json!({
+    json!({
         "track": playing.track,
         "isPlaying": playing.is_playing,
         "currentTime": current_time,
-    }))
+    })
 }

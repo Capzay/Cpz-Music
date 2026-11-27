@@ -5,6 +5,8 @@ mod library;
 mod media;
 mod now_playing;
 pub use now_playing::NowPlaying;
+use now_playing::snapshot as now_playing_snapshot;
+mod pages;
 mod playlists;
 mod stats;
 
@@ -58,15 +60,17 @@ async fn health() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
 
-/// Applied to every response. The policy is much tighter than the Next.js one
-/// because nothing here is a page: there is no script or style to allow.
+/// Applied to every response. The policy allows no script or style at all; the
+/// two pages in `pages` set their own, which this leaves in place.
 async fn security_headers(mut response: Response) -> Response {
     let headers = response.headers_mut();
+    if !headers.contains_key(header::CONTENT_SECURITY_POLICY) {
+        headers.insert(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
+        );
+    }
     for (name, value) in [
-        (
-            "content-security-policy",
-            "default-src 'none'; frame-ancestors 'none'",
-        ),
         ("x-content-type-options", "nosniff"),
         ("x-frame-options", "DENY"),
         ("referrer-policy", "no-referrer"),
@@ -128,7 +132,9 @@ pub fn router(state: Shared) -> Router {
 
     let auth_routes = Router::new()
         .route("/auth/callback", get(auth::callback))
-        .route("/jam/join", get(auth::join));
+        .route("/jam/join", get(auth::join))
+        .route("/jam", get(pages::jam))
+        .route("/obs", get(pages::obs));
 
     Router::new()
         .merge(media)

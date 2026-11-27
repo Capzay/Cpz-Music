@@ -678,6 +678,7 @@ async fn a_guest_goes_from_invite_to_kicked() {
     assert_eq!(view["albums"].as_array().unwrap().len(), 2);
     assert_eq!(view["albums"][1]["tracks"][0]["title"], "01 Amber");
     assert_eq!(view["albums"][1]["tracks"].as_array().unwrap().len(), 2);
+    assert_eq!(view["nowPlaying"]["track"], Value::Null);
 
     assert_eq!(
         h.post("/api/jam/add", &guest, json!({ "trackId": id }))
@@ -873,7 +874,7 @@ async fn bad_invites_bounce_with_a_reason() {
         own.headers()["location"]
             .to_str()
             .unwrap()
-            .ends_with("/settings")
+            .ends_with("/jam?error=host")
     );
     assert!(h.mock.user("owner")["app_metadata"].get("jam").is_none());
 
@@ -1160,4 +1161,38 @@ async fn serves_the_latest_desktop_build_to_the_owner() {
             .status(),
         404
     );
+}
+
+#[tokio::test]
+async fn serves_the_jam_and_overlay_pages_with_their_own_policy() {
+    let h = harness!();
+    for path in ["/jam", "/obs?token=whatever"] {
+        let page = h.get(path, "").await;
+        assert_eq!(page.status(), 200, "{path}");
+        let policy = page.headers()["content-security-policy"]
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let nonce = policy
+            .split("'nonce-")
+            .nth(1)
+            .and_then(|rest| rest.split('\'').next())
+            .unwrap()
+            .to_owned();
+        let html = page.text().await.unwrap();
+        assert!(
+            html.contains(&format!("<script nonce=\"{nonce}\">")),
+            "{path}"
+        );
+        assert!(!html.contains("{nonce}"), "{path}");
+    }
+
+    // An invite link without a name asks for one before anything else happens.
+    let host = h.owner_cookie();
+    h.post("/api/jam/start", &host, json!({})).await;
+    let invite = invite_url(&h, &host).await;
+    let ask = h.http.get(&invite).send().await.unwrap();
+    assert_eq!(ask.status(), 200);
+    assert!(ask.text().await.unwrap().contains("Join the jam"));
+    assert_eq!(h.mock.signups.load(Ordering::SeqCst), 0);
 }

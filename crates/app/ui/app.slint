@@ -1,12 +1,13 @@
 import { Spinner } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem } from "state.slint";
+import { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, StatTrack, GuestItem } from "state.slint";
 import { NavItem, IconButton, PrimaryButton } from "widgets.slint";
 import { TrackItem, QueueItem } from "types.slint";
 import { AlbumsPage, ArtistsPage, AlbumPage, ArtistPage, SearchPage, PlaylistsPage, PlaylistPage, DownloadsPage, SetupPage, SignInPage } from "pages.slint";
 import { PlayerBar, QueuePanel, DevicesPanel, MiniPlayer, NowPlaying } from "player.slint";
+import { StatsPage, SettingsPage } from "more.slint";
 
-export { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, TrackItem, QueueItem }
+export { App, Playback, AlbumItem, ArtistItem, DeviceItem, PlaylistItem, TrackItem, QueueItem, StatTrack, GuestItem }
 
 component Sidebar inherits Rectangle {
     background: Theme.panel;
@@ -76,6 +77,18 @@ component Sidebar inherits Rectangle {
             icon: @image-url("icons/search.svg");
             selected: App.page == "search";
             clicked => { App.navigate("search"); }
+        }
+        NavItem {
+            text: "Stats";
+            icon: @image-url("icons/stats.svg");
+            selected: App.page == "stats";
+            clicked => { App.navigate("stats"); }
+        }
+        NavItem {
+            text: "Settings";
+            icon: @image-url("icons/settings.svg");
+            selected: App.page == "settings";
+            clicked => { App.navigate("settings"); }
         }
 
         Rectangle { }
@@ -295,6 +308,35 @@ component AccountMenu inherits Rectangle {
                 font-size: Theme.size-small;
                 wrap: word-wrap;
             }
+            for entry in [
+                { id: "stats", label: "Stats", icon: @image-url("icons/stats.svg") },
+                { id: "settings", label: "Settings", icon: @image-url("icons/settings.svg") },
+            ]: Rectangle {
+                height: 40px;
+                border-radius: Theme.radius;
+                background: entry-touch.pressed ? Theme.hover : transparent;
+                HorizontalLayout {
+                    padding-left: 4px;
+                    spacing: 12px;
+                    Image {
+                        source: entry.icon;
+                        width: 20px;
+                        colorize: Theme.muted;
+                    }
+                    Text {
+                        text: entry.label;
+                        color: Theme.text;
+                        font-size: Theme.size-body;
+                        vertical-alignment: center;
+                    }
+                }
+                entry-touch := TouchArea {
+                    clicked => {
+                        root.close();
+                        App.navigate(entry.id);
+                    }
+                }
+            }
             Text {
                 text: "Version " + App.version;
                 color: Theme.faint;
@@ -450,6 +492,8 @@ export component AppWindow inherits Window {
                     if App.page == "playlists": PlaylistsPage { }
                     if App.page == "playlist": PlaylistPage { }
                     if App.page == "downloads": DownloadsPage { }
+                    if App.page == "stats": StatsPage { }
+                    if App.page == "settings": SettingsPage { }
                 }
                 MiniPlayer {
                     expand => { root.show-now-playing = true; }
@@ -507,6 +551,8 @@ export component AppWindow inherits Window {
                             if App.page == "playlists": PlaylistsPage { }
                             if App.page == "playlist": PlaylistPage { }
                             if App.page == "downloads": DownloadsPage { }
+                            if App.page == "stats": StatsPage { }
+                            if App.page == "settings": SettingsPage { }
                         }
                     }
 

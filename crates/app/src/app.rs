@@ -15,7 +15,9 @@ use cpz_core::player::{Command, Player, PlayerDeps};
 use cpz_core::playlists::Playlists;
 use cpz_core::realtime::{Channel, ChannelConfig, Hub, Identity, PLAYER_TOPIC};
 use cpz_core::store::Store;
-use cpz_core::types::{AlbumSummary, ArtistCard, ClientConfig, PlayerTrack};
+use cpz_core::types::{
+    AlbumSummary, ArtistCard, ClientConfig, PlayerTrack, Settings, Stats, StatsPeriod,
+};
 use slint::{ComponentHandle, Image, Weak};
 
 use crate::art::{Art, Pixels};
@@ -23,7 +25,7 @@ use crate::view::{
     self, album_item, artist_hit, artist_item, bytes, cover_album, length, playlist_item, plural,
     track_item,
 };
-use crate::{AlbumItem, App, AppWindow, Playback, PlaylistItem};
+use crate::{AlbumItem, App, AppWindow, ArtistItem, GuestItem, Playback, PlaylistItem, StatTrack};
 
 const SERVER_KEY: &str = "server";
 const CONFIG_KEY: &str = "client-config";
@@ -34,6 +36,10 @@ const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(600);
 const PLAYLIST_SYNC_EVERY: Duration = Duration::from_secs(60);
 /// How often to ask the server whether a newer build of the app is out.
 const UPDATE_CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
+/// The jam's guest list also reloads on a broadcast; this is the backstop for
+/// a broadcast that never arrived.
+const SETTINGS_RELOAD_EVERY: Duration = Duration::from_secs(15);
+const DISCORD_KEY: &str = "discord";
 
 pub struct Paths {
     pub data: PathBuf,
@@ -43,6 +49,8 @@ pub struct Paths {
 /// Everything that needs a signed-in session.
 pub struct Services {
     pub api: Api,
+    /// The server's address, for links such as cover art handed to Discord.
+    pub server: String,
     pub hub: Hub,
     pub downloads: Arc<Downloads>,
     pub playlists: Arc<Playlists>,
@@ -60,6 +68,8 @@ enum Route {
     /// By uuid.
     Playlist(String),
     Downloads,
+    Stats,
+    Settings,
 }
 
 impl Route {
@@ -73,6 +83,8 @@ impl Route {
             Self::Playlists => "playlists",
             Self::Playlist(_) => "playlist",
             Self::Downloads => "downloads",
+            Self::Stats => "stats",
+            Self::Settings => "settings",
         }
     }
 }
@@ -124,6 +136,7 @@ struct Shared {
     update: Mutex<Option<ClientRelease>>,
     /// Installed: start the new build once this one has closed.
     restart: AtomicBool,
+    stats_period: Mutex<StatsPeriod>,
 }
 
 /// Downloads asked for since the last batch finished.
@@ -232,6 +245,7 @@ impl Ctx {
                 progress: Mutex::new(Progress::default()),
                 update: Mutex::new(None),
                 restart: AtomicBool::new(false),
+                stats_period: Mutex::new(StatsPeriod::default()),
             }),
         }
     }
@@ -502,6 +516,7 @@ impl Ctx {
         let playlists = Arc::new(Playlists::load(self.shared.store.clone()));
         let services = Arc::new(Services {
             api: api.clone(),
+            server,
             hub,
             downloads,
             playlists,
@@ -612,11 +627,18 @@ impl Ctx {
         let mut changes = services.hub.subscribe();
         let ctx = self.clone();
         let (downloads, art) = (services.downloads.clone(), services.art.clone());
+        let server = services.server.clone();
         tokio::spawn(async move {
             #[cfg(target_os = "android")]
             let mut shown = (String::new(), String::new(), false);
+            let mut jam_version = 0;
             loop {
                 let state = changes.borrow_and_update().clone();
+                // Someone joined, was let in or left: redraw the guest list.
+                if state.jam_version != jam_version {
+                    jam_version = state.jam_version;
+                    ctx.reload_settings();
+                }
                 // Only the device the sound comes out of shows the notification.
                 #[cfg(target_os = "android")]
                 {
@@ -634,7 +656,10 @@ impl Ctx {
                     }
                 }
                 let (downloads, art, ctx2) = (downloads.clone(), art.clone(), ctx.clone());
+                let _server = server.clone();
                 ctx.ui(move |ui| {
+                    #[cfg(not(target_os = "android"))]
+                    crate::desktop::show(ui, &state, &_server);
                     view::with(|v| {
                         v.hub(
                             ui,
@@ -875,7 +900,238 @@ impl Ctx {
             // Playlists live on the device, so there is nothing to wait for.
             Route::Playlists | Route::Playlist(_) => self.refresh_playlists(),
             Route::Downloads => self.refresh_downloads(),
+            Route::Stats => self.load_stats(&services, generation).await,
+            Route::Settings => {
+                self.load_settings(&services, generation, true).await;
+                // While the page is open, in case a jam broadcast went missing.
+                let ctx = self.clone();
+                tokio::spawn(async move {
+                    loop {
+                        tokio::time::sleep(SETTINGS_RELOAD_EVERY).await;
+                        if !ctx.current(generation) {
+                            return;
+                        }
+                        ctx.load_settings(&services, generation, false).await;
+                    }
+                });
+            }
         }
+    }
+
+    // ── Stats ───────────────────────────────────────────────────────────────
+
+    async fn load_stats(&self, services: &Arc<Services>, generation: u64) {
+        let period = *self.shared.stats_period.lock().unwrap();
+        self.busy();
+        let stats = match services.api.stats(period).await {
+            Ok(stats) => stats,
+            Err(err) => return self.failed(generation, err),
+        };
+        self.reached();
+        if !self.current(generation) {
+            return;
+        }
+        let Stats {
+            totals,
+            top_tracks,
+            top_artists,
+            ..
+        } = stats;
+        let figures = [
+            length(totals.listen_secs as f64),
+            totals.play_count.to_string(),
+            totals.unique_tracks.to_string(),
+            totals.unique_artists.to_string(),
+        ];
+        let art = &services.art;
+        let wanted: Vec<i32> = top_tracks
+            .iter()
+            .filter(|t| t.has_artwork && art.get(t.album_id).is_none())
+            .map(|t| t.album_id)
+            .collect();
+        let tracks: Vec<_> = top_tracks
+            .into_iter()
+            .map(|t| {
+                let pixels = t.has_artwork.then(|| art.get(t.album_id)).flatten();
+                (t, pixels)
+            })
+            .collect();
+        let artists: Vec<ArtistItem> = top_artists
+            .iter()
+            .map(|a| ArtistItem {
+                id: a.artist_id,
+                name: a.artist_name.as_str().into(),
+                detail: length(a.listen_secs as f64).into(),
+            })
+            .collect();
+        self.ui(move |ui| {
+            let app = ui.global::<App>();
+            let [time, plays, songs, artist_count] = figures;
+            app.set_stats_time(time.into());
+            app.set_stats_plays(plays.into());
+            app.set_stats_songs(songs.into());
+            app.set_stats_artist_count(artist_count.into());
+            let rows: Vec<StatTrack> = tracks
+                .into_iter()
+                .map(|(t, pixels)| StatTrack {
+                    id: t.id,
+                    title: t.title.as_str().into(),
+                    artist: t.artist.as_str().into(),
+                    album_id: t.album_id,
+                    detail: format!(
+                        "{} · {}",
+                        plural(t.play_count as usize, "play", "plays"),
+                        length(t.listen_secs as f64)
+                    )
+                    .into(),
+                    art: pixels.map(Image::from_rgb8).unwrap_or_default(),
+                })
+                .collect();
+            view::with(|v| {
+                v.stats_tracks.set_vec(rows);
+                v.stats_artists.set_vec(artists);
+            });
+            app.set_busy(false);
+        });
+        let mut wanted = wanted;
+        wanted.sort_unstable();
+        wanted.dedup();
+        for album in wanted {
+            self.request_art(art, album);
+        }
+    }
+
+    fn pick_stats_period(&self, period: &str) {
+        let period = match period {
+            "week" => StatsPeriod::Week,
+            "month" => StatsPeriod::Month,
+            "all" => StatsPeriod::All,
+            _ => StatsPeriod::Year,
+        };
+        *self.shared.stats_period.lock().unwrap() = period;
+        if self.shared.routes.lock().unwrap().last() == Some(&Route::Stats) {
+            self.show(Route::Stats);
+        }
+    }
+
+    // ── Settings ────────────────────────────────────────────────────────────
+
+    /// The name other devices list this one under.
+    fn this_device_name(&self, services: &Services) -> String {
+        let state = services.hub.state();
+        state
+            .devices
+            .iter()
+            .find(|d| d.device_id == state.me)
+            .map(|d| d.name.clone())
+            .or_else(|| {
+                self.shared
+                    .store
+                    .get::<String>("device-name")
+                    .ok()
+                    .flatten()
+            })
+            .unwrap_or_else(device_name)
+    }
+
+    /// `busy` shows the spinner; the quiet reloads behind the jam list skip it.
+    async fn load_settings(&self, services: &Arc<Services>, generation: u64, busy: bool) {
+        let name = self.this_device_name(services);
+        self.ui(move |ui| ui.global::<App>().set_device_name(name.into()));
+        if busy {
+            self.busy();
+        }
+        let settings = match services.api.settings().await {
+            Ok(settings) => settings,
+            Err(err) => return self.failed(generation, err),
+        };
+        self.reached();
+        if !self.current(generation) {
+            return;
+        }
+        self.show_settings(settings);
+    }
+
+    fn show_settings(&self, settings: Settings) {
+        let Settings {
+            overlay_url,
+            secret_missing,
+            jam,
+            invite_url,
+            participants,
+        } = settings;
+        let title = match jam.as_ref().and_then(|j| j.host_name.as_deref()) {
+            Some(host) => format!("{host}'s jam is on"),
+            None => "Jam is on".to_owned(),
+        };
+        let guests: Vec<GuestItem> = participants
+            .iter()
+            .map(|p| GuestItem {
+                id: p.id.as_str().into(),
+                name: p.name.as_str().into(),
+                pending: p.status == "pending",
+            })
+            .collect();
+        self.ui(move |ui| {
+            let app = ui.global::<App>();
+            app.set_jam_running(jam.is_some());
+            app.set_jam_title(title.into());
+            app.set_invite_url(invite_url.unwrap_or_default().into());
+            app.set_overlay_url(overlay_url.unwrap_or_default().into());
+            app.set_secret_missing(secret_missing);
+            app.set_error("".into());
+            app.set_busy(false);
+            view::with(|v| v.guests.set_vec(guests));
+        });
+    }
+
+    /// Redraws the settings page, if it is the one on screen.
+    fn reload_settings(&self) {
+        if self.shared.routes.lock().unwrap().last() != Some(&Route::Settings) {
+            return;
+        }
+        let Some(services) = self.services() else {
+            return;
+        };
+        let generation = self.shared.page_generation.load(Ordering::Acquire);
+        let ctx = self.clone();
+        tokio::spawn(async move { ctx.load_settings(&services, generation, false).await });
+    }
+
+    /// One of the jam's buttons, then the page again to show what it did.
+    fn jam_action(&self, path: String, body: serde_json::Value) {
+        let Some(services) = self.services() else {
+            return;
+        };
+        let ctx = self.clone();
+        self.busy();
+        tokio::spawn(async move {
+            let generation = ctx.shared.page_generation.load(Ordering::Acquire);
+            if let Err(err) = services.api.jam_action(&path, &body).await {
+                return ctx.failed(generation, err);
+            }
+            ctx.load_settings(&services, generation, false).await;
+        });
+    }
+
+    fn rename_device(&self, name: &str) {
+        let name = name.trim();
+        let Some(services) = self.services() else {
+            return;
+        };
+        if name.is_empty() {
+            return;
+        }
+        services.hub.rename(name);
+        let name = name.to_owned();
+        self.ui(move |ui| ui.global::<App>().set_device_name(name.into()));
+    }
+
+    fn set_discord(&self, on: bool) {
+        let _ = self.shared.store.set(DISCORD_KEY, &on);
+        self.ui(move |ui| ui.global::<App>().set_discord(on));
+        #[cfg(not(target_os = "android"))]
+        crate::desktop::set_discord(on);
     }
 
     fn track_rows(
@@ -1363,7 +1619,64 @@ impl Ctx {
                 }
             });
         }
+        let discord: bool = self
+            .shared
+            .store
+            .get(DISCORD_KEY)
+            .ok()
+            .flatten()
+            .unwrap_or(true);
+        #[cfg(not(target_os = "android"))]
+        {
+            let mut keys = crate::desktop::start(discord);
+            let ctx = self.clone();
+            tokio::spawn(async move {
+                while let Some(event) = keys.recv().await {
+                    let Some(services) = ctx.services() else {
+                        continue;
+                    };
+                    let position = services.hub.state().player.position;
+                    if let Some(command) = crate::desktop::command(event, position) {
+                        services.hub.send(command);
+                    }
+                }
+            });
+        }
         let app = ui.global::<App>();
+        app.set_desktop(cfg!(not(target_os = "android")));
+        app.set_discord(discord);
+        let ctx = self.clone();
+        app.on_stats_period_picked(move |period| ctx.pick_stats_period(&period));
+        let ctx = self.clone();
+        app.on_start_jam(move |host| {
+            let host = host.trim().to_owned();
+            ctx.jam_action(
+                "/api/jam/start".into(),
+                serde_json::json!({ "hostName": host }),
+            );
+        });
+        let ctx = self.clone();
+        app.on_stop_jam(move || ctx.jam_action("/api/jam/stop".into(), serde_json::json!({})));
+        let ctx = self.clone();
+        app.on_new_invite(move || ctx.jam_action("/api/jam/invite".into(), serde_json::json!({})));
+        let ctx = self.clone();
+        app.on_admit(move |pid| {
+            ctx.jam_action(
+                format!("/api/jam/participants/{pid}/admit"),
+                serde_json::json!({}),
+            )
+        });
+        let ctx = self.clone();
+        app.on_kick(move |pid| {
+            ctx.jam_action(
+                format!("/api/jam/participants/{pid}/kick"),
+                serde_json::json!({}),
+            )
+        });
+        let ctx = self.clone();
+        app.on_rename_device(move |name| ctx.rename_device(&name));
+        let ctx = self.clone();
+        app.on_set_discord(move |on| ctx.set_discord(on));
         let ctx = self.clone();
         app.on_navigate(move |page| match page.as_str() {
             "albums" => ctx.go_top(Route::Albums),
@@ -1371,6 +1684,8 @@ impl Ctx {
             "search" => ctx.go_top(Route::Search),
             "playlists" => ctx.go_top(Route::Playlists),
             "downloads" => ctx.go_top(Route::Downloads),
+            "stats" => ctx.go_top(Route::Stats),
+            "settings" => ctx.go_top(Route::Settings),
             "album-artist" => {
                 let artist = *ctx.shared.album_artist.lock().unwrap();
                 if let Some(id) = artist {

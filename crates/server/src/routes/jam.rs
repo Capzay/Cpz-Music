@@ -366,5 +366,6 @@ pub async fn guest(
         "name": name,
         "hostName": active.host_name,
         "albums": albums,
+        "nowPlaying": super::now_playing_snapshot(&state),
     })))
 }

@@ -13,7 +13,7 @@ use tokio::io::AsyncWriteExt;
 use crate::auth::Credentials;
 use crate::types::{
     AlbumDetail, AlbumSummary, ArtistCard, ArtistDetail, ClientConfig, PlayerTrack,
-    PlaylistSnapshot, SearchResults, Stats, StatsPeriod,
+    PlaylistSnapshot, SearchResults, Settings, Stats, StatsPeriod,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -234,14 +234,14 @@ impl Api {
         self.post_empty("/api/now-playing", &body).await
     }
 
-    /// Settings page data: jam state and the OBS overlay link. Kept loose until
-    /// the settings screen settles what it shows.
-    pub async fn settings(&self) -> ApiResult<Value> {
+    /// Settings page data: jam state and the OBS overlay link.
+    pub async fn settings(&self) -> ApiResult<Settings> {
         self.get("/api/settings").await
     }
 
-    pub async fn jam_action(&self, path: &str) -> ApiResult<()> {
-        self.post_empty(path, &json!({})).await
+    /// One of the host's `/api/jam/...` buttons.
+    pub async fn jam_action(&self, path: &str, body: &Value) -> ApiResult<()> {
+        self.post_empty(path, body).await
     }
 
     /// Streams a track into `dest`, through a temporary file so a dropped

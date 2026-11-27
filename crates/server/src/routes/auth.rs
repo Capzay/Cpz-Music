@@ -13,7 +13,7 @@ use crate::Shared;
 use crate::auth::session::Session;
 use crate::auth::{Identity, Resolved, User, apply_cookies, cookies};
 use crate::error::{ApiError, ApiResult};
-use crate::jam::{join_jam, read_invite};
+use crate::jam::{invite_open, join_jam, read_invite};
 use crate::origin::request_origin;
 use crate::rate_limit::client_key;
 
@@ -148,6 +148,17 @@ pub async fn join(
         redirect(format!("{origin}/jam?error={error}"), set_cookies)
     };
 
+    // A newcomer's link without a name gets the page that asks for one, which
+    // comes back here with it. Only while the link still works: a dead one, the
+    // owner's own, or a guest reopening theirs goes straight to its answer.
+    if !params.contains_key("name")
+        && caller.user.is_none()
+        && let Some(claims) = read_invite(&state.tokens, params.get("token").map(String::as_str))
+        && invite_open(&state.db, &claims).await?
+    {
+        return Ok(super::pages::jam().await);
+    }
+
     let key = format!("jam-join:{}", client_key(&headers));
     if !state.limiter.check(&key, 10, Duration::from_secs(60)) {
         return Ok(bounce("rate_limited", &[]));
@@ -166,9 +177,9 @@ pub async fn join(
     };
 
     // The owner testing their own invite link must not have guest claims written
-    // onto their GitHub account. Send them to the panel they actually wanted.
+    // onto their GitHub account. The page tells them to use the app instead.
     if caller.is_host() {
-        return Ok(redirect(format!("{origin}/settings"), &[]));
+        return Ok(bounce("host", &[]));
     }
 
     // Reuse an existing session where there is one, so refreshing the invite link

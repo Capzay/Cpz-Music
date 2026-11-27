@@ -8,6 +8,10 @@ mod view;
 
 #[cfg(target_os = "android")]
 mod android;
+#[cfg(not(target_os = "android"))]
+mod desktop;
+#[cfg(not(target_os = "android"))]
+mod discord;
 
 use std::sync::Arc;
 

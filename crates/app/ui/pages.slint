@@ -108,14 +108,14 @@ component Heading inherits Text {
     font-weight: 700;
 }
 
-component SubHeading inherits Text {
+export component SubHeading inherits Text {
     color: Theme.text;
     font-size: Theme.size-title + 5px;
     font-weight: 700;
 }
 
 // A page's title, with room on the right for its buttons.
-component PageHeader inherits HorizontalLayout {
+export component PageHeader inherits HorizontalLayout {
     in property <string> title;
     in property <string> detail;
     spacing: 12px;
@@ -150,7 +150,7 @@ component HeroTitle inherits Text {
 }
 
 // Loading, failed or empty, else the page itself.
-component PageState inherits Rectangle {
+export component PageState inherits Rectangle {
     in property <bool> empty;
     in property <string> empty-title;
     in property <string> empty-body;
@@ -205,7 +205,7 @@ export component AlbumsPage inherits Rectangle {
     }
 }
 
-component ArtistRow inherits Rectangle {
+export component ArtistRow inherits Rectangle {
     in property <ArtistItem> artist;
     callback clicked;
 

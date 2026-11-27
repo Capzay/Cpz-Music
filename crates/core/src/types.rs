@@ -138,6 +138,33 @@ pub struct Stats {
     pub top_artists: Vec<TopArtist>,
 }
 
+/// `GET /api/settings`: the running jam, if any, and the links to share.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Settings {
+    pub overlay_url: Option<String>,
+    pub secret_missing: bool,
+    pub jam: Option<JamInfo>,
+    pub invite_url: Option<String>,
+    pub participants: Vec<JamGuest>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct JamInfo {
+    pub id: String,
+    pub host_name: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct JamGuest {
+    pub id: String,
+    pub name: String,
+    /// "pending" or "admitted".
+    pub status: String,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RepeatMode {

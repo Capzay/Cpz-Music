@@ -112,6 +112,16 @@ pub async fn rotate_invite(db: &PgPool, jam_id: &str) -> Result<(), sqlx::Error>
     Ok(())
 }
 
+/// Whether a new guest could still join with this link.
+pub async fn invite_open(db: &PgPool, claims: &InviteClaims) -> Result<bool, sqlx::Error> {
+    let epoch: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "inviteEpoch" FROM "Jam" WHERE id = $1 AND active"#)
+            .bind(&claims.jam_id)
+            .fetch_optional(db)
+            .await?;
+    Ok(epoch.is_some_and(|epoch| claims.epoch == f64::from(epoch)))
+}
+
 /// Attaches a Supabase user to a jam, creating the participant row on first use.
 ///
 /// Returns None when the jam is over or the link has been rotated. Existing

@@ -56,3 +56,21 @@ export struct PlaylistItem {
     album-id: int,
     art: image,
 }
+
+// A row in the stats page's most played songs.
+export struct StatTrack {
+    id: int,
+    title: string,
+    artist: string,
+    album-id: int,
+    // "12 plays · 40 min"
+    detail: string,
+    art: image,
+}
+
+// Someone in the jam, or asking to be let in.
+export struct GuestItem {
+    id: string,
+    name: string,
+    pending: bool,
+}
